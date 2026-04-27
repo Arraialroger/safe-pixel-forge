@@ -1,6 +1,27 @@
-import { Lock } from "lucide-react";
+import { useState } from "react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface VaultCardProps {
   vault: Vault;
@@ -8,36 +29,159 @@ interface VaultCardProps {
 
 export function VaultCard({ vault }: VaultCardProps) {
   const isPaid = vault.status === "paid";
+  const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  async function handleCopy() {
+    const url = `${window.location.origin}/pay/${vault.public_slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      toast({
+        title: "Link copiado!",
+        description: "Envie para o seu cliente.",
+      });
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast({
+        title: "Não foi possível copiar o link",
+        description: "Copie manualmente: " + url,
+        variant: "destructive",
+      });
+    }
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (vault.file_path) {
+        const { error: storageErr } = await supabase.storage
+          .from("vault-files")
+          .remove([vault.file_path]);
+        if (storageErr) {
+          // best-effort: continue with row delete even if storage fails
+          console.warn("Falha ao remover arquivo do storage:", storageErr);
+        }
+      }
+      const { error } = await supabase.from("vaults").delete().eq("id", vault.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vaults"] });
+      toast({
+        title: "Cofre excluído",
+        description: "O cofre foi removido com sucesso.",
+      });
+      setConfirmOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Erro ao excluir cofre",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <article className="group rounded-lg border border-border bg-card p-5 transition-all duration-200 hover:border-muted-foreground/30 hover:bg-accent/30">
       <header className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background">
             <Lock className="h-4 w-4 text-vault" strokeWidth={2.25} />
           </span>
-          <h3 className="text-sm font-semibold leading-tight text-foreground">
+          <h3 className="truncate text-sm font-semibold leading-tight text-foreground">
             {vault.title}
           </h3>
         </div>
 
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-            isPaid ? "bg-success/15 text-success" : "bg-primary/15 text-primary",
-          )}
-        >
-          {statusLabel(vault.status)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+              isPaid ? "bg-success/15 text-success" : "bg-primary/15 text-primary",
+            )}
+          >
+            {statusLabel(vault.status)}
+          </span>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label="Ações do cofre"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setConfirmOpen(true);
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Excluir cofre
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
       <p className="mb-3 text-xs text-muted-foreground">
         Cliente · <span className="text-foreground/80">{vault.client_name}</span>
       </p>
 
-      <p className="text-xl font-semibold tracking-tight text-foreground">
+      <p className="mb-4 text-xl font-semibold tracking-tight text-foreground">
         {formatBRL(Number(vault.price))}
       </p>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleCopy}
+        className="w-full"
+      >
+        {copied ? (
+          <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
+        ) : (
+          <Link2 className="mr-1.5 h-3.5 w-3.5" />
+        )}
+        {copied ? "Link copiado" : "Copiar link"}
+      </Button>
+
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => !deleteMutation.isPending && setConfirmOpen(o)}>
+        <AlertDialogContent className="bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este cofre?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O arquivo vinculado também será removido do storage.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteMutation.mutate();
+              }}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </article>
   );
 }
