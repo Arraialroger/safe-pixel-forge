@@ -1,35 +1,45 @@
-// Auth mockada em memória (sem persistência, sem backend).
-// Simples store baseado em listeners para compartilhar entre componentes.
-
 import { useEffect, useState } from "react";
-
-let authed = false;
-const listeners = new Set<() => void>();
-
-function notify() {
-  listeners.forEach((l) => l());
-}
+import type { Session, User } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
 export function useAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState(authed);
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const update = () => setIsAuthenticated(authed);
-    listeners.add(update);
+    // 1) Listener primeiro (recomendado)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+      setLoading(false);
+    });
+
+    // 2) Em seguida, recupera sessão atual
+    supabase.auth.getSession().then(({ data: { session: current } }) => {
+      setSession(current);
+      setUser(current?.user ?? null);
+      setLoading(false);
+    });
+
     return () => {
-      listeners.delete(update);
+      sub.subscription.unsubscribe();
     };
   }, []);
 
   return {
-    isAuthenticated,
-    login: () => {
-      authed = true;
-      notify();
-    },
-    logout: () => {
-      authed = false;
-      notify();
-    },
+    user,
+    session,
+    loading,
+    isAuthenticated: !!user,
+    signIn: (email: string, password: string) =>
+      supabase.auth.signInWithPassword({ email, password }),
+    signUp: (email: string, password: string) =>
+      supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      }),
+    signOut: () => supabase.auth.signOut(),
   };
 }

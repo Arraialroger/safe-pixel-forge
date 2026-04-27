@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { Vault, formatBRL } from "@/data/mockVaults";
+import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
 
 interface VaultCardProps {
@@ -7,7 +7,7 @@ interface VaultCardProps {
 }
 
 export function VaultCard({ vault }: VaultCardProps) {
-  const isPaid = vault.status === "pago";
+  const isPaid = vault.status === "paid";
 
   return (
     <article className="group rounded-lg border border-border bg-card p-5 transition-all duration-200 hover:border-muted-foreground/30 hover:bg-accent/30">
@@ -17,28 +17,26 @@ export function VaultCard({ vault }: VaultCardProps) {
             <Lock className="h-4 w-4 text-vault" strokeWidth={2.25} />
           </span>
           <h3 className="text-sm font-semibold leading-tight text-foreground">
-            {vault.project}
+            {vault.title}
           </h3>
         </div>
 
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
-            isPaid
-              ? "bg-success/15 text-success"
-              : "bg-primary/15 text-primary",
+            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+            isPaid ? "bg-success/15 text-success" : "bg-primary/15 text-primary",
           )}
         >
-          {vault.status}
+          {statusLabel(vault.status)}
         </span>
       </header>
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Cliente · <span className="text-foreground/80">{vault.client}</span>
+        Cliente · <span className="text-foreground/80">{vault.client_name}</span>
       </p>
 
       <p className="text-xl font-semibold tracking-tight text-foreground">
-        {formatBRL(vault.amount)}
+        {formatBRL(Number(vault.price))}
       </p>
     </article>
   );
