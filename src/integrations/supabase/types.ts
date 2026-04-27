@@ -42,6 +42,8 @@ export type Database = {
         Row: {
           client_name: string
           created_at: string
+          file_name: string | null
+          file_path: string | null
           id: string
           owner_id: string
           price: number
@@ -52,6 +54,8 @@ export type Database = {
         Insert: {
           client_name: string
           created_at?: string
+          file_name?: string | null
+          file_path?: string | null
           id?: string
           owner_id: string
           price: number
@@ -62,6 +66,8 @@ export type Database = {
         Update: {
           client_name?: string
           created_at?: string
+          file_name?: string | null
+          file_path?: string | null
           id?: string
           owner_id?: string
           price?: number

@@ -9,6 +9,8 @@ export interface Vault {
   status: VaultStatus;
   owner_id: string;
   public_slug: string;
+  file_path: string | null;
+  file_name: string | null;
   created_at: string;
 }
 
