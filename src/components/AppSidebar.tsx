@@ -11,12 +11,15 @@ const navItems = [
 
 export function AppSidebar() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, signOut } = useAuth();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await signOut();
     navigate("/login");
   }
+
+  const email = user?.email ?? "";
+  const initials = email ? email.slice(0, 2).toUpperCase() : "··";
 
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-card">
@@ -45,11 +48,11 @@ export function AppSidebar() {
       <div className="border-t border-border p-3">
         <div className="mb-2 flex items-center gap-2.5 px-2 py-1.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-medium text-foreground">
-            UD
+            {initials}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-foreground">Usuário Demo</p>
-            <p className="truncate text-[11px] text-muted-foreground">demo@pixelsafe.app</p>
+            <p className="truncate text-xs font-medium text-foreground">{email || "Conta"}</p>
+            <p className="truncate text-[11px] text-muted-foreground">PixelSafe</p>
           </div>
         </div>
         <button

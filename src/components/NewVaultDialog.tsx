@@ -1,4 +1,6 @@
 import { FormEvent, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,48 +20,73 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
-import { Vault, VaultStatus } from "@/data/mockVaults";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
+import { VaultStatus } from "@/data/mockVaults";
 
-interface NewVaultDialogProps {
-  onCreate: (vault: Vault) => void;
-}
-
-export function NewVaultDialog({ onCreate }: NewVaultDialogProps) {
+export function NewVaultDialog() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [project, setProject] = useState("");
-  const [client, setClient] = useState("");
+  const [title, setTitle] = useState("");
+  const [clientName, setClientName] = useState("");
   const [amount, setAmount] = useState("");
-  const [status, setStatus] = useState<VaultStatus>("pendente");
+  const [status, setStatus] = useState<VaultStatus>("pending");
 
   function reset() {
-    setProject("");
-    setClient("");
+    setTitle("");
+    setClientName("");
     setAmount("");
-    setStatus("pendente");
+    setStatus("pending");
   }
+
+  const mutation = useMutation({
+    mutationFn: async (payload: {
+      title: string;
+      client_name: string;
+      price: number;
+      status: VaultStatus;
+    }) => {
+      if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+      const { data, error } = await supabase
+        .from("vaults")
+        .insert({ ...payload, owner_id: user.id })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vaults"] });
+      toast({ title: "Cofre criado", description: "Seu cofre foi salvo com sucesso." });
+      reset();
+      setOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao criar cofre", description: err.message, variant: "destructive" });
+    },
+  });
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!project.trim() || !client.trim() || !amount) return;
+    if (!title.trim() || !clientName.trim() || !amount) return;
     const numericAmount = Number(amount.replace(",", "."));
     if (Number.isNaN(numericAmount) || numericAmount <= 0) return;
 
-    onCreate({
-      id: `v-${Date.now()}`,
-      project: project.trim(),
-      client: client.trim(),
-      amount: numericAmount,
+    mutation.mutate({
+      title: title.trim(),
+      client_name: clientName.trim(),
+      price: numericAmount,
       status,
     });
-    reset();
-    setOpen(false);
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
+        if (mutation.isPending) return;
         setOpen(o);
         if (!o) reset();
       }}
@@ -86,9 +113,10 @@ export function NewVaultDialog({ onCreate }: NewVaultDialogProps) {
             <Input
               id="project"
               placeholder="Ex.: Logo Café Raíz"
-              value={project}
-              onChange={(e) => setProject(e.target.value)}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               className="bg-background"
+              disabled={mutation.isPending}
             />
           </div>
 
@@ -99,9 +127,10 @@ export function NewVaultDialog({ onCreate }: NewVaultDialogProps) {
             <Input
               id="client"
               placeholder="Ex.: Marina Souza"
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
               className="bg-background"
+              disabled={mutation.isPending}
             />
           </div>
 
@@ -117,27 +146,40 @@ export function NewVaultDialog({ onCreate }: NewVaultDialogProps) {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="bg-background"
+                disabled={mutation.isPending}
               />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as VaultStatus)}>
+              <Select
+                value={status}
+                onValueChange={(v) => setStatus(v as VaultStatus)}
+                disabled={mutation.isPending}
+              >
                 <SelectTrigger className="bg-background">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="pago">Pago</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <DialogFooter className="pt-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setOpen(false)}
+              disabled={mutation.isPending}
+            >
               Cancelar
             </Button>
-            <Button type="submit">Criar cofre</Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Criar cofre
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
