@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Vault } from "@/data/mockVaults";
+import { EmptyVaults } from "@/components/EmptyVaults";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -51,11 +52,7 @@ export default function Dashboard() {
       )}
 
       {!isLoading && !isError && vaults && vaults.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            Você ainda não tem cofres. Crie o primeiro com o botão "Novo Cofre" acima.
-          </p>
-        </div>
+        <EmptyVaults />
       )}
 
       {!isLoading && vaults && vaults.length > 0 && (
