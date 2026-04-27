@@ -1,0 +1,65 @@
+import { LayoutDashboard, Settings, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { NavLink } from "@/components/NavLink";
+import { Logo } from "@/components/Logo";
+import { useAuth } from "@/hooks/useAuth";
+
+const navItems = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/configuracoes", label: "Configurações", icon: Settings },
+];
+
+export function AppSidebar() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
+  }
+
+  return (
+    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-card">
+      <div className="flex h-14 items-center px-4">
+        <Logo />
+      </div>
+
+      <nav className="flex-1 space-y-1 px-3 py-2">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end
+              className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              activeClassName="bg-accent text-foreground"
+            >
+              <Icon className="h-4 w-4" />
+              <span>{item.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-border p-3">
+        <div className="mb-2 flex items-center gap-2.5 px-2 py-1.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-medium text-foreground">
+            UD
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-foreground">Usuário Demo</p>
+            <p className="truncate text-[11px] text-muted-foreground">demo@pixelsafe.app</p>
+          </div>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Sair</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
