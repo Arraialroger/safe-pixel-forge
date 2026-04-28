@@ -65,22 +65,44 @@ Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
 - **WhatsApp**: abre `https://wa.me/{numero}?text={texto}`. Se `client_whatsapp` preenchido → `55{digits}`; caso contrário, sem destinatário.
 - **Excluir**: remove arquivo do storage (best-effort) e a linha em `vaults`. Confirmação via `AlertDialog`.
 
-## Pagamento — Edge Function `create-payment`
+## Pagamento — Edge Functions
 
-`supabase/functions/create-payment/index.ts`
+Todas em `supabase/functions/`. Configuradas com `verify_jwt = false` em `supabase/config.toml` (rotas públicas chamadas por visitantes anônimos ou pelo Mercado Pago).
 
+### `create-payment`
 Entrada: `{ vault_id: uuid }`. Fluxo:
 1. Valida body (Zod).
 2. Cliente Supabase com `SUPABASE_SERVICE_ROLE_KEY` (bypassa RLS).
 3. Busca vault por `id`. Rejeita se já `paid`.
 4. Busca `mp_access_token` em `workspaces` pelo `owner_id` do vault.
-5. `POST https://api.mercadopago.com/checkout/preferences` com `items`, `external_reference = vault.id`, `back_urls` e `auto_return: "approved"`.
+5. `POST https://api.mercadopago.com/checkout/preferences` com `items`, `external_reference = vault.id`, `back_urls`, `auto_return: "approved"` e `notification_url = ${SUPABASE_URL}/functions/v1/mp-webhook?vault_id=${vault.id}`.
 6. Retorna `{ init_point, preference_id }`.
 
 No frontend (`PayVault.tsx`), o botão chama `supabase.functions.invoke('create-payment')` e redireciona via `window.location.href = init_point`.
 
+### `mp-webhook`
+Endpoint público chamado pelo Mercado Pago após o pagamento. Sempre responde `200` (mesmo em erro) para evitar reentrega infinita.
+1. Lê `vault_id` da query string.
+2. `UPDATE vaults SET status='paid' WHERE id=vault_id AND status<>'paid' RETURNING title, client_email, public_slug` — idempotente.
+3. Se houve mudança e há `client_email`, dispara e-mail via Resend (`POST https://api.resend.com/emails`):
+   - From: `PixelSafe <suporte@pixelsafe.com.br>`
+   - Subject: `Seu arquivo "{title}" está liberado! 🔓`
+   - HTML inline com CTA para `${PUBLIC_APP_URL}/pay/${public_slug}` (fallback para a URL publicada do Lovable).
+
+### `get-download-url`
+Entrada: `{ slug: string }`. Fluxo:
+1. Busca o vault pelo `public_slug`.
+2. Se `status !== 'paid'` → `403`.
+3. Gera Signed URL de **15 minutos** (`vault-files`, `createSignedUrl(file_path, 900)`).
+4. Retorna `{ signed_url }`. O frontend abre em nova aba.
+
+### Variáveis de ambiente (Edge Functions)
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (gerenciadas).
+- `RESEND_API_KEY` (configurada).
+- `PUBLIC_APP_URL` (opcional, fallback hardcoded para a URL publicada).
+
 ## Pendências (próximas fases)
 
-- **Fase 5**: webhook do Mercado Pago → atualizar `vaults.status = 'paid'`; geração de signed URL para download do arquivo após confirmação.
 - Substituir mock da página de Configurações por persistência real do `mp_access_token` em `workspaces`.
-- E-mail/notificação ao cliente quando pago.
+- Validar assinatura/origem do webhook do Mercado Pago (consultar `/v1/payments/{id}` com o `access_token` do owner).
+- Reenvio manual do e-mail de liberação a partir do dashboard.

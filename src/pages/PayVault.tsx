@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, Lock, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,7 @@ interface PublicVault {
   price: number;
   status: VaultStatus;
   public_slug: string;
+  file_name: string | null;
 }
 
 export default function PayVault() {
@@ -27,7 +28,7 @@ export default function PayVault() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vaults")
-        .select("id, title, client_name, price, status, public_slug")
+        .select("id, title, client_name, price, status, public_slug, file_name")
         .eq("public_slug", slug!)
         .maybeSingle();
       if (error) throw error;
@@ -63,7 +64,7 @@ export default function PayVault() {
           </div>
         )}
 
-        {data && <CheckoutCard vault={data} />}
+        {data && (data.status === "paid" ? <SuccessCard vault={data} /> : <CheckoutCard vault={data} />)}
       </div>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
@@ -74,8 +75,6 @@ export default function PayVault() {
 }
 
 function CheckoutCard({ vault }: { vault: PublicVault }) {
-  const isPaid = vault.status === "paid";
-
   const payMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke<{
@@ -131,9 +130,7 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[11px] font-medium",
-            isPaid
-              ? "bg-success/15 text-success"
-              : "bg-primary/15 text-primary"
+            "bg-primary/15 text-primary",
           )}
         >
           {statusLabel(vault.status)}
@@ -142,12 +139,10 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
 
       <Button
         className="w-full"
-        disabled={isPaid || isLoading}
+        disabled={isLoading}
         onClick={() => payMutation.mutate()}
       >
-        {isPaid ? (
-          "Arquivo já liberado"
-        ) : isLoading ? (
+        {isLoading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Redirecionando...
@@ -159,6 +154,84 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
 
       <p className="mt-4 text-center text-[11px] text-muted-foreground">
         Após confirmar o pagamento, o arquivo é liberado automaticamente.
+      </p>
+    </article>
+  );
+}
+
+function SuccessCard({ vault }: { vault: PublicVault }) {
+  const downloadMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke<{
+        signed_url: string;
+        error?: string;
+      }>("get-download-url", {
+        body: { slug: vault.public_slug },
+      });
+      if (error) throw error;
+      if (!data?.signed_url) {
+        throw new Error(data?.error ?? "Resposta inválida do servidor");
+      }
+      return data.signed_url;
+    },
+    onSuccess: (signedUrl) => {
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast({
+        title: "Não foi possível gerar o link de download",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isLoading = downloadMutation.isPending;
+
+  return (
+    <article className="rounded-lg border border-success/40 bg-success/5 p-8 shadow-none">
+      <div className="mb-6 flex flex-col items-center text-center">
+        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-success/40 bg-success/10">
+          <CheckCircle2 className="h-7 w-7 text-success" strokeWidth={2.25} />
+        </div>
+        <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-success">
+          Pagamento confirmado
+        </p>
+      </div>
+
+      <div className="mb-6 text-center">
+        <h1 className="text-lg font-semibold text-foreground">{vault.title}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Seu arquivo está pronto para download.
+        </p>
+        {vault.file_name && (
+          <p className="mt-1 text-xs text-muted-foreground/80 truncate">
+            {vault.file_name}
+          </p>
+        )}
+      </div>
+
+      <Button
+        className="w-full"
+        disabled={isLoading}
+        onClick={() => downloadMutation.mutate()}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Gerando link seguro...
+          </>
+        ) : (
+          <>
+            <Download className="mr-2 h-4 w-4" />
+            Baixar arquivo
+          </>
+        )}
+      </Button>
+
+      <p className="mt-4 text-center text-[11px] text-muted-foreground">
+        O link de download é válido por 15 minutos.
       </p>
     </article>
   );
