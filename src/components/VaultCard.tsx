@@ -151,19 +151,32 @@ export function VaultCard({ vault }: VaultCardProps) {
         {formatBRL(Number(vault.price))}
       </p>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleCopy}
-        className="w-full"
-      >
-        {copied ? (
-          <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
-        ) : (
-          <Link2 className="mr-1.5 h-3.5 w-3.5" />
-        )}
-        {copied ? "Link copiado" : "Copiar link"}
-      </Button>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCopy}
+          className="w-full"
+        >
+          {copied ? (
+            <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
+          ) : (
+            <Link2 className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {copied ? "Link copiado" : "Copiar link"}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleWhatsApp}
+          aria-label="Compartilhar via WhatsApp"
+          title="Compartilhar via WhatsApp"
+          className="px-2.5 text-success hover:text-success"
+        >
+          <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.25} />
+        </Button>
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={(o) => !deleteMutation.isPending && setConfirmOpen(o)}>
         <AlertDialogContent className="bg-card">
