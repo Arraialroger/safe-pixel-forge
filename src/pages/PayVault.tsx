@@ -76,7 +76,13 @@ export default function PayVault() {
           </div>
         )}
 
-        {data && (data.status === "paid" ? <SuccessCard vault={data} /> : <CheckoutCard vault={data} />)}
+        {data && (
+          data.status === "paid"
+            ? <SuccessCard vault={data} />
+            : isProcessingFromUrl
+              ? <ProcessingCard vault={data} />
+              : <CheckoutCard vault={data} />
+        )}
       </div>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
