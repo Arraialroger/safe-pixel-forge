@@ -452,8 +452,33 @@ export function NewVaultDialog() {
               )}
             </div>
 
+            <FormField
+              control={form.control}
+              name="notify_client"
+              render={({ field }) => (
+                <FormItem className="flex items-start gap-2.5 rounded-md border border-border bg-background/50 p-3">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={(v) => field.onChange(v === true)}
+                      disabled={mutation.isPending}
+                      className="mt-0.5"
+                    />
+                  </FormControl>
+                  <div className="space-y-0.5">
+                    <FormLabel className="cursor-pointer text-xs font-medium text-foreground">
+                      Enviar link por e-mail para o cliente agora
+                    </FormLabel>
+                    <p className="text-[11px] text-muted-foreground">
+                      Você poderá reenviar manualmente depois.
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
+
             <DialogFooter className="pt-2">
-              <Button
+
                 type="button"
                 variant="ghost"
                 onClick={() => setOpen(false)}
