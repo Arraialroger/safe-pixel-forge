@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Lock, ShieldCheck } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface PublicVault {
+  id: string;
   title: string;
   client_name: string;
   price: number;
@@ -26,7 +27,7 @@ export default function PayVault() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vaults")
-        .select("title, client_name, price, status, public_slug")
+        .select("id, title, client_name, price, status, public_slug")
         .eq("public_slug", slug!)
         .maybeSingle();
       if (error) throw error;
@@ -75,6 +76,35 @@ export default function PayVault() {
 function CheckoutCard({ vault }: { vault: PublicVault }) {
   const isPaid = vault.status === "paid";
 
+  const payMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke<{
+        init_point: string;
+        error?: string;
+      }>("create-payment", {
+        body: { vault_id: vault.id },
+      });
+      if (error) throw error;
+      if (!data?.init_point) {
+        throw new Error(data?.error ?? "Resposta inválida do servidor");
+      }
+      return data.init_point;
+    },
+    onSuccess: (initPoint) => {
+      window.location.href = initPoint;
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast({
+        title: "Não foi possível iniciar o pagamento",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isLoading = payMutation.isPending;
+
   return (
     <article className="rounded-lg border border-border bg-card p-8 shadow-none">
       <div className="mb-6 flex flex-col items-center text-center">
@@ -112,15 +142,19 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
 
       <Button
         className="w-full"
-        disabled={isPaid}
-        onClick={() =>
-          toast({
-            title: "Em breve",
-            description: "Integração com Mercado Pago em breve.",
-          })
-        }
+        disabled={isPaid || isLoading}
+        onClick={() => payMutation.mutate()}
       >
-        {isPaid ? "Arquivo já liberado" : "Pagar e Liberar Arquivo"}
+        {isPaid ? (
+          "Arquivo já liberado"
+        ) : isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Redirecionando...
+          </>
+        ) : (
+          "Pagar e Liberar Arquivo"
+        )}
       </Button>
 
       <p className="mt-4 text-center text-[11px] text-muted-foreground">
