@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.send-vault-created]
 verify_jwt = true
+
+[functions.get-owner-branding]
+verify_jwt = false
