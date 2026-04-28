@@ -254,3 +254,36 @@ function SuccessCard({ vault }: { vault: PublicVault }) {
     </article>
   );
 }
+
+function ProcessingCard({ vault }: { vault: PublicVault }) {
+  return (
+    <article className="rounded-lg border border-vault/40 bg-vault/5 p-8 shadow-none">
+      <div className="mb-6 flex flex-col items-center text-center">
+        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-vault/40 bg-vault/10">
+          <Clock className="h-7 w-7 text-vault" strokeWidth={2.25} />
+        </div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-vault">
+          Aguardando confirmação
+        </p>
+      </div>
+
+      <div className="mb-2 text-center">
+        <h1 className="text-lg font-semibold text-foreground">{vault.title}</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          Recebemos o seu pedido! Estamos aguardando a confirmação do Mercado Pago.
+          Assim que o pagamento for processado (boletos podem levar até 2 dias úteis),
+          o arquivo será liberado aqui e enviaremos um aviso para o seu e-mail.
+        </p>
+      </div>
+
+      <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Esta página atualiza automaticamente.
+      </div>
+
+      <p className="mt-4 text-center text-[11px] text-muted-foreground/80">
+        Você pode fechar esta página com segurança.
+      </p>
+    </article>
+  );
+}
