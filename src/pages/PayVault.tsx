@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { formatBRL, statusLabel, VaultStatus } from "@/data/mockVaults";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { usePublicOwnerBranding } from "@/hooks/useBranding";
 
 const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
@@ -19,6 +20,7 @@ interface PublicVault {
   status: VaultStatus;
   public_slug: string;
   file_name: string | null;
+  owner_id: string;
 }
 
 export default function PayVault() {
@@ -26,6 +28,7 @@ export default function PayVault() {
   const [searchParams] = useSearchParams();
   const mpStatus = searchParams.get("status");
   const isProcessingFromUrl = !!mpStatus && PROCESSING_STATUSES.has(mpStatus);
+  // branding hook is called inside the render below once we have data
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["public-vault", slug],
@@ -33,7 +36,7 @@ export default function PayVault() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vaults")
-        .select("id, title, client_name, price, status, public_slug, file_name")
+        .select("id, title, client_name, price, status, public_slug, file_name, owner_id")
         .eq("public_slug", slug!)
         .maybeSingle();
       if (error) throw error;
@@ -50,9 +53,7 @@ export default function PayVault() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">
-      <div className="mb-8">
-        <Logo size="md" />
-      </div>
+      <CheckoutHeader ownerId={data?.owner_id ?? null} />
 
       <div className="w-full max-w-md">
         {isLoading && (
