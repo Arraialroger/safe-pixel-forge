@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,18 @@ export function VaultCard({ vault }: VaultCardProps) {
         description: "Copie manualmente: " + url,
         variant: "destructive",
       });
-    }
+  }
+
+  function handleWhatsApp() {
+    const link = `${window.location.origin}/pay/${vault.public_slug}`;
+    const text = `Olá! Preparei o arquivo do seu projeto. Acesse o link seguro para realizar o pagamento e liberar o download: ${link}`;
+    const encoded = encodeURIComponent(text);
+    const digits = vault.client_whatsapp?.replace(/\D/g, "") ?? "";
+    const url = digits
+      ? `https://wa.me/55${digits}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
   }
 
   const deleteMutation = useMutation({
