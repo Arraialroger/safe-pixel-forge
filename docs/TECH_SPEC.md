@@ -14,9 +14,10 @@ Fonte da verdade do projeto. Atualizar ao final de cada fase.
 ## Estrutura do Banco (Supabase)
 
 ### `profiles`
-Dados estendidos do usuário autenticado.
+Dados estendidos do usuário autenticado. Populada automaticamente pelo trigger `handle_new_user` no Sign Up.
 - `id` (uuid, PK), `full_name`, `email`, `custom_logo_url`, `created_at`
-- **RLS**: cada usuário gerencia apenas o próprio registro (`id = auth.uid()`).
+- `custom_logo_url` é exibida na Sidebar (autenticado) e na página pública de checkout (`/pay/:slug`) substituindo a logo padrão do PixelSafe.
+- **RLS**: owner-only (`id = auth.uid()`). Leitura pública é feita exclusivamente via Edge Function `get-owner-branding` (com `service_role`), retornando apenas `custom_logo_url` e `full_name`.
 
 ### `vaults`
 Cofre = entrega de projeto + cobrança vinculada.
@@ -31,12 +32,16 @@ Cofre = entrega de projeto + cobrança vinculada.
   - `Public can read vaults`: SELECT para `anon` e `authenticated` (necessário para o checkout público funcionar pelo slug).
 
 ### `workspaces`
-Configurações por dono — guarda credenciais sensíveis do vendedor.
+Configurações por dono — guarda credenciais sensíveis do vendedor. Populada automaticamente pelo trigger `handle_new_user`.
 - `id` (uuid, PK), `owner_id`, `mp_access_token`, `created_at`
 - **RLS**: owner-only (`owner_id = auth.uid()`).
 
 ### Storage
 - Bucket **`vault-files`** (privado). Layout: `${user_id}/${vault_id}/${nome_seguro}`.
+- Bucket **`logos`** (público). Layout: `${user_id}/logo_imagem.{ext}`.
+  - Policies em `storage.objects`: `INSERT`/`UPDATE`/`DELETE` permitidos apenas quando `bucket_id = 'logos' AND (storage.foldername(name))[1] = auth.uid()::text`.
+  - **Sem policy de SELECT** — leitura é feita exclusivamente via URL pública servida pelo CDN (não permite enumeração/listagem do bucket).
+  - URL salva em `profiles.custom_logo_url` recebe sufixo `?v={timestamp}` para cache-busting após upload.
 
 ## Rotas
 
@@ -46,7 +51,7 @@ Configurações por dono — guarda credenciais sensíveis do vendedor.
 | `/login` | público | Autenticação Supabase |
 | `/pay/:slug` | público | Checkout do cofre pelo `public_slug` |
 | `/dashboard` | autenticado | Lista de cofres do owner |
-| `/configuracoes` | autenticado | Configurações (mock — Mercado Pago) |
+| `/configuracoes` | autenticado | Multi-tenant: edição de perfil, upload de logo, integração Mercado Pago e plano (placeholder SaaS) |
 | `*` | público | NotFound |
 
 Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
