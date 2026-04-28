@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.get-download-url]
 verify_jwt = false
+
+[functions.send-vault-created]
+verify_jwt = true

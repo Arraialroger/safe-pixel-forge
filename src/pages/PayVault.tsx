@@ -1,6 +1,6 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,8 @@ import { Logo } from "@/components/Logo";
 import { formatBRL, statusLabel, VaultStatus } from "@/data/mockVaults";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
 interface PublicVault {
   id: string;
@@ -21,6 +23,9 @@ interface PublicVault {
 
 export default function PayVault() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const mpStatus = searchParams.get("status");
+  const isProcessingFromUrl = !!mpStatus && PROCESSING_STATUSES.has(mpStatus);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["public-vault", slug],
@@ -33,6 +38,13 @@ export default function PayVault() {
         .maybeSingle();
       if (error) throw error;
       return data as PublicVault | null;
+    },
+    // Enquanto está em "processando", faz polling para flipar para Sucesso quando o webhook confirmar.
+    refetchInterval: (query) => {
+      const v = query.state.data as PublicVault | null | undefined;
+      if (!v) return false;
+      if (v.status === "paid") return false;
+      return isProcessingFromUrl ? 10_000 : false;
     },
   });
 
@@ -64,7 +76,13 @@ export default function PayVault() {
           </div>
         )}
 
-        {data && (data.status === "paid" ? <SuccessCard vault={data} /> : <CheckoutCard vault={data} />)}
+        {data && (
+          data.status === "paid"
+            ? <SuccessCard vault={data} />
+            : isProcessingFromUrl
+              ? <ProcessingCard vault={data} />
+              : <CheckoutCard vault={data} />
+        )}
       </div>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
@@ -232,6 +250,39 @@ function SuccessCard({ vault }: { vault: PublicVault }) {
 
       <p className="mt-4 text-center text-[11px] text-muted-foreground">
         O link de download é válido por 15 minutos.
+      </p>
+    </article>
+  );
+}
+
+function ProcessingCard({ vault }: { vault: PublicVault }) {
+  return (
+    <article className="rounded-lg border border-vault/40 bg-vault/5 p-8 shadow-none">
+      <div className="mb-6 flex flex-col items-center text-center">
+        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-vault/40 bg-vault/10">
+          <Clock className="h-7 w-7 text-vault" strokeWidth={2.25} />
+        </div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-vault">
+          Aguardando confirmação
+        </p>
+      </div>
+
+      <div className="mb-2 text-center">
+        <h1 className="text-lg font-semibold text-foreground">{vault.title}</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          Recebemos o seu pedido! Estamos aguardando a confirmação do Mercado Pago.
+          Assim que o pagamento for processado (boletos podem levar até 2 dias úteis),
+          o arquivo será liberado aqui e enviaremos um aviso para o seu e-mail.
+        </p>
+      </div>
+
+      <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Esta página atualiza automaticamente.
+      </div>
+
+      <p className="mt-4 text-center text-[11px] text-muted-foreground/80">
+        Você pode fechar esta página com segurança.
       </p>
     </article>
   );

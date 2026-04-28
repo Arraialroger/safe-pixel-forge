@@ -36,6 +36,7 @@ import { toast } from "@/hooks/use-toast";
 import { VaultStatus } from "@/data/mockVaults";
 import { formatBRLInput, parseBRLToNumber } from "@/lib/currency";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -70,6 +71,7 @@ const schema = z.object({
       "Valor muito alto."
     ),
   status: z.enum(["pending", "paid"]),
+  notify_client: z.boolean().default(true),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -98,6 +100,7 @@ export function NewVaultDialog() {
       client_whatsapp: "",
       price_masked: "",
       status: "pending",
+      notify_client: true,
     },
   });
 
@@ -137,12 +140,13 @@ export function NewVaultDialog() {
 
       // 1. Insert vault
       const whatsapp = values.client_whatsapp?.trim();
+      const clientEmail = values.client_email.trim();
       const { data: vault, error: insertErr } = await supabase
         .from("vaults")
         .insert({
           title: values.title.trim(),
           client_name: values.client_name.trim(),
-          client_email: values.client_email.trim(),
+          client_email: clientEmail,
           client_whatsapp: whatsapp ? whatsapp : null,
           price,
           status: values.status,
@@ -173,14 +177,35 @@ export function NewVaultDialog() {
         if (updErr) throw updErr;
       }
 
-      return vault;
+      // 4. Optional: dispara e-mail inicial. NÃO falha o cofre se o e-mail falhar.
+      let emailError: string | null = null;
+      if (values.notify_client && clientEmail) {
+        try {
+          const { error: fnErr } = await supabase.functions.invoke(
+            "send-vault-created",
+            { body: { vault_id: vault.id } },
+          );
+          if (fnErr) emailError = fnErr.message;
+        } catch (e) {
+          emailError = e instanceof Error ? e.message : "erro desconhecido";
+        }
+      }
+
+      return { vault, emailError };
     },
-    onSuccess: () => {
+    onSuccess: ({ emailError }) => {
       queryClient.invalidateQueries({ queryKey: ["vaults"] });
-      toast({
-        title: "Cofre criado",
-        description: "Seu cofre foi salvo com sucesso.",
-      });
+      if (emailError) {
+        toast({
+          title: "Cofre criado",
+          description: "Não foi possível enviar o e-mail agora. Você pode reenviar manualmente.",
+        });
+      } else {
+        toast({
+          title: "Cofre criado",
+          description: "Seu cofre foi salvo com sucesso.",
+        });
+      }
       resetAll();
       setOpen(false);
     },
@@ -426,6 +451,31 @@ export function NewVaultDialog() {
                 </div>
               )}
             </div>
+
+            <FormField
+              control={form.control}
+              name="notify_client"
+              render={({ field }) => (
+                <FormItem className="flex items-start gap-2.5 rounded-md border border-border bg-background/50 p-3">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={(v) => field.onChange(v === true)}
+                      disabled={mutation.isPending}
+                      className="mt-0.5"
+                    />
+                  </FormControl>
+                  <div className="space-y-0.5">
+                    <FormLabel className="cursor-pointer text-xs font-medium text-foreground">
+                      Enviar link por e-mail para o cliente agora
+                    </FormLabel>
+                    <p className="text-[11px] text-muted-foreground">
+                      Você poderá reenviar manualmente depois.
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
 
             <DialogFooter className="pt-2">
               <Button

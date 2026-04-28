@@ -2,6 +2,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 
 // Webhook público — Mercado Pago não envia JWT.
 // Sempre responde 200 para evitar reentrega infinita; erros são apenas logados.
+//
+// Regra crítica: o MP dispara o webhook em vários estados (pending, in_process,
+// approved, rejected...). Só liberamos o cofre se a API confirmar
+// status === "approved" E o external_reference bater com o vault_id da URL.
 
 const PUBLIC_APP_URL =
   Deno.env.get("PUBLIC_APP_URL") ?? "https://safe-pixel-forge.lovable.app";
@@ -49,27 +53,131 @@ function buildEmailHtml(title: string, link: string): string {
 </html>`;
 }
 
+function ok() {
+  return new Response("ok", { status: 200 });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS" || req.method === "GET") {
-    return new Response("ok", { status: 200 });
+    return ok();
   }
 
   try {
     const url = new URL(req.url);
     const vaultId = url.searchParams.get("vault_id");
 
-    // Drena o body para evitar resource leak; conteúdo é ignorado.
-    await req.text().catch(() => "");
+    let body: Record<string, unknown> = {};
+    try {
+      const raw = await req.text();
+      if (raw) body = JSON.parse(raw);
+    } catch (_e) {
+      body = {};
+    }
 
     if (!vaultId) {
-      console.warn("mp-webhook: missing vault_id");
-      return new Response("ok", { status: 200 });
+      console.warn("mp-webhook: missing vault_id in query");
+      return ok();
+    }
+
+    // O MP envia notificações para diversos tópicos (payment, merchant_order, plan...).
+    // Só nos interessa "payment".
+    const type =
+      (body.type as string | undefined) ??
+      (body.topic as string | undefined) ??
+      (typeof body.action === "string"
+        ? (body.action as string).split(".")[0]
+        : undefined);
+
+    if (type !== "payment") {
+      console.log("mp-webhook: ignoring non-payment notification", { type, vaultId });
+      return ok();
+    }
+
+    const data = body.data as { id?: string | number } | undefined;
+    const paymentId = data?.id ? String(data.id) : null;
+    if (!paymentId) {
+      console.warn("mp-webhook: payment notification without data.id", vaultId);
+      return ok();
     }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Busca dono do cofre para resolver o access_token correto.
+    const { data: vaultRow, error: vaultErr } = await supabase
+      .from("vaults")
+      .select("id, owner_id, status")
+      .eq("id", vaultId)
+      .maybeSingle();
+
+    if (vaultErr) {
+      console.error("mp-webhook: vault lookup error", vaultErr);
+      return ok();
+    }
+    if (!vaultRow) {
+      console.warn("mp-webhook: vault not found", vaultId);
+      return ok();
+    }
+    if (vaultRow.status === "paid") {
+      console.log("mp-webhook: vault already paid, skipping", vaultId);
+      return ok();
+    }
+
+    const { data: workspace, error: wsErr } = await supabase
+      .from("workspaces")
+      .select("mp_access_token")
+      .eq("owner_id", vaultRow.owner_id)
+      .maybeSingle();
+
+    if (wsErr || !workspace?.mp_access_token) {
+      console.error("mp-webhook: missing access token for owner", vaultRow.owner_id, wsErr);
+      return ok();
+    }
+
+    // Validação real do pagamento na API do Mercado Pago.
+    const mpRes = await fetch(
+      `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${workspace.mp_access_token}`,
+        },
+      },
+    );
+
+    if (!mpRes.ok) {
+      const errBody = await mpRes.text().catch(() => "");
+      console.error("mp-webhook: MP payment lookup failed", mpRes.status, errBody);
+      return ok();
+    }
+
+    const payment = await mpRes.json().catch(() => null) as
+      | { status?: string; external_reference?: string }
+      | null;
+
+    if (!payment) {
+      console.error("mp-webhook: invalid MP response");
+      return ok();
+    }
+
+    // Cross-check: external_reference precisa bater com o vault_id (anti-spoof).
+    if (payment.external_reference && payment.external_reference !== vaultId) {
+      console.warn("mp-webhook: external_reference mismatch", {
+        expected: vaultId,
+        got: payment.external_reference,
+      });
+      return ok();
+    }
+
+    if (payment.status !== "approved") {
+      console.log("mp-webhook: payment not approved yet", {
+        vaultId,
+        paymentId,
+        status: payment.status,
+      });
+      return ok();
+    }
 
     // Idempotente: só atualiza (e devolve linha) se ainda estava pendente.
     const { data: updated, error: updErr } = await supabase
@@ -82,23 +190,21 @@ Deno.serve(async (req) => {
 
     if (updErr) {
       console.error("mp-webhook: update error", updErr);
-      return new Response("ok", { status: 200 });
+      return ok();
     }
-
     if (!updated) {
-      console.log("mp-webhook: vault already paid or not found", vaultId);
-      return new Response("ok", { status: 200 });
+      console.log("mp-webhook: race — vault already paid", vaultId);
+      return ok();
     }
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (!resendKey) {
       console.error("mp-webhook: RESEND_API_KEY missing");
-      return new Response("ok", { status: 200 });
+      return ok();
     }
-
     if (!updated.client_email) {
       console.warn("mp-webhook: vault has no client_email", vaultId);
-      return new Response("ok", { status: 200 });
+      return ok();
     }
 
     const link = `${PUBLIC_APP_URL}/pay/${updated.public_slug}`;
@@ -126,9 +232,9 @@ Deno.serve(async (req) => {
       console.log("mp-webhook: release email sent", vaultId);
     }
 
-    return new Response("ok", { status: 200 });
+    return ok();
   } catch (err) {
     console.error("mp-webhook: unexpected error", err);
-    return new Response("ok", { status: 200 });
+    return ok();
   }
 });
