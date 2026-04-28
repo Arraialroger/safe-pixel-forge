@@ -5,6 +5,8 @@ export interface Vault {
   id: string;
   title: string;
   client_name: string;
+  client_email: string | null;
+  client_whatsapp: string | null;
   price: number;
   status: VaultStatus;
   owner_id: string;

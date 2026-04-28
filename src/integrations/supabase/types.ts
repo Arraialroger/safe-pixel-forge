@@ -40,7 +40,9 @@ export type Database = {
       }
       vaults: {
         Row: {
+          client_email: string | null
           client_name: string
+          client_whatsapp: string | null
           created_at: string
           file_name: string | null
           file_path: string | null
@@ -52,7 +54,9 @@ export type Database = {
           title: string
         }
         Insert: {
+          client_email?: string | null
           client_name: string
+          client_whatsapp?: string | null
           created_at?: string
           file_name?: string | null
           file_path?: string | null
@@ -64,7 +68,9 @@ export type Database = {
           title: string
         }
         Update: {
+          client_email?: string | null
           client_name?: string
+          client_whatsapp?: string | null
           created_at?: string
           file_name?: string | null
           file_path?: string | null
