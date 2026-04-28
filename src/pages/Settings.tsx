@@ -1,11 +1,61 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { ImagePlus, Loader2, Trash2, Lock, KeyRound, Sparkles } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+
+// ----- Schemas -----
+const profileSchema = z.object({
+  full_name: z
+    .string()
+    .trim()
+    .min(1, "Informe um nome")
+    .max(100, "Máximo de 100 caracteres"),
+});
+type ProfileForm = z.infer<typeof profileSchema>;
+
+const tokenSchema = z.object({
+  mp_access_token: z
+    .string()
+    .trim()
+    .min(20, "Token muito curto")
+    .max(200, "Token muito longo"),
+});
+type TokenForm = z.infer<typeof tokenSchema>;
+
+const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2MB
 
 export default function Settings() {
-  const [emailNotif, setEmailNotif] = useState(true);
-  const [weeklyDigest, setWeeklyDigest] = useState(false);
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
+  if (!userId) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -14,86 +64,456 @@ export default function Settings() {
           Configurações
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Ajuste sua conta, notificações e plano.
+          Ajuste seu perfil, marca e integrações.
         </p>
       </header>
 
       <div className="space-y-4">
-        {/* Perfil */}
-        <section className="rounded-lg border border-border bg-card p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-sm font-medium text-foreground">
-                UD
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Usuário Demo</h2>
-                <p className="text-xs text-muted-foreground">demo@pixelsafe.app</p>
-              </div>
-            </div>
-            <Button variant="secondary" size="sm">
-              Editar
-            </Button>
-          </div>
-        </section>
-
-        {/* Notificações */}
-        <section className="rounded-lg border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-semibold text-foreground">Notificações</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="email-notif" className="text-sm text-foreground">
-                  Email de novos pagamentos
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Receba um email quando um cofre for pago.
-                </p>
-              </div>
-              <Switch
-                id="email-notif"
-                checked={emailNotif}
-                onCheckedChange={setEmailNotif}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="weekly-digest" className="text-sm text-foreground">
-                  Resumo semanal
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Receba um resumo dos seus cofres toda segunda-feira.
-                </p>
-              </div>
-              <Switch
-                id="weekly-digest"
-                checked={weeklyDigest}
-                onCheckedChange={setWeeklyDigest}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Plano */}
-        <section className="rounded-lg border border-border bg-card p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-foreground">Plano</h2>
-                <span className="rounded-full bg-vault/15 px-2 py-0.5 text-[11px] font-medium text-vault">
-                  Pro
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Renova em 12/05/2026 · R$ 39,00/mês
-              </p>
-            </div>
-            <Button variant="secondary" size="sm">
-              Gerenciar plano
-            </Button>
-          </div>
-        </section>
+        <ProfileCard userId={userId} />
+        <MercadoPagoCard userId={userId} />
+        <PlanCard />
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Profile + Logo
+// ============================================================
+
+function ProfileCard({ userId }: { userId: string }) {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const profileQuery = useQuery({
+    queryKey: ["profile", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, email, custom_logo_url")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const form = useForm<ProfileForm>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: { full_name: "" },
+  });
+
+  useEffect(() => {
+    if (profileQuery.data) {
+      form.reset({ full_name: profileQuery.data.full_name ?? "" });
+    }
+  }, [profileQuery.data, form]);
+
+  // Cleanup do object URL do preview
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (values: ProfileForm) => {
+      let nextLogoUrl: string | null | undefined = undefined;
+
+      if (pendingFile) {
+        const ext = (pendingFile.name.split(".").pop() ?? "").toLowerCase();
+        const safeExt = ext ? `.${ext}` : "";
+        const path = `${userId}/logo_imagem${safeExt}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("logos")
+          .upload(path, pendingFile, {
+            upsert: true,
+            contentType: pendingFile.type,
+            cacheControl: "3600",
+          });
+        if (upErr) throw upErr;
+
+        const { data: pub } = supabase.storage.from("logos").getPublicUrl(path);
+        nextLogoUrl = `${pub.publicUrl}?v=${Date.now()}`;
+      }
+
+      const update: Record<string, unknown> = { full_name: values.full_name };
+      if (nextLogoUrl !== undefined) update.custom_logo_url = nextLogoUrl;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(update)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Perfil atualizado", description: "Suas informações foram salvas." });
+      setPendingFile(null);
+      setPreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      queryClient.invalidateQueries({ queryKey: ["public-owner-branding", userId] });
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast({
+        title: "Erro ao salvar",
+        description: "Não foi possível atualizar o perfil. Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const removeLogoMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ custom_logo_url: null })
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Logo removida" });
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      queryClient.invalidateQueries({ queryKey: ["public-owner-branding", userId] });
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast({
+        title: "Erro ao remover logo",
+        variant: "destructive",
+      });
+    },
+  });
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+      toast({
+        title: "Formato não suportado",
+        description: "Use PNG, JPG, WEBP ou SVG.",
+        variant: "destructive",
+      });
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "Limite de 2MB.",
+        variant: "destructive",
+      });
+      e.target.value = "";
+      return;
+    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  }
+
+  const isLoading = profileQuery.isLoading;
+  const currentLogo = previewUrl ?? profileQuery.data?.custom_logo_url ?? null;
+  const email = profileQuery.data?.email ?? "";
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold text-foreground">Perfil e marca</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Sua logo aparece na barra lateral e nas páginas de checkout dos seus clientes.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-16 w-16 rounded-md" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+      ) : (
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))}
+            className="space-y-5"
+          >
+            {/* Logo */}
+            <div className="flex items-start gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
+                {currentLogo ? (
+                  <img
+                    src={currentLogo}
+                    alt="Logo"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <Lock className="h-6 w-6 text-vault" strokeWidth={2.25} />
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label className="text-xs text-muted-foreground">Logo da agência</Label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_LOGO_TYPES.join(",")}
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+                    {currentLogo ? "Trocar logo" : "Enviar logo"}
+                  </Button>
+                  {profileQuery.data?.custom_logo_url && !pendingFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeLogoMutation.mutate()}
+                      disabled={removeLogoMutation.isPending}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Remover
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  PNG, JPG, WEBP ou SVG · até 2MB.
+                </p>
+              </div>
+            </div>
+
+            {/* Nome */}
+            <FormField
+              control={form.control}
+              name="full_name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome completo</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Seu nome ou nome da agência" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Email read-only */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Email</Label>
+              <Input value={email} disabled />
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={saveMutation.isPending}>
+                {saveMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Salvar perfil
+              </Button>
+            </div>
+          </form>
+        </Form>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// Mercado Pago
+// ============================================================
+
+function maskToken(token: string): string {
+  const last4 = token.slice(-4);
+  return `APP_USR-••••-${last4}`;
+}
+
+function MercadoPagoCard({ userId }: { userId: string }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+
+  const workspaceQuery = useQuery({
+    queryKey: ["workspace", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workspaces")
+        .select("mp_access_token")
+        .eq("owner_id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const form = useForm<TokenForm>({
+    resolver: zodResolver(tokenSchema),
+    defaultValues: { mp_access_token: "" },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (values: TokenForm) => {
+      const { error } = await supabase
+        .from("workspaces")
+        .update({ mp_access_token: values.mp_access_token })
+        .eq("owner_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Integração salva",
+        description: "Seu token do Mercado Pago foi armazenado com segurança.",
+      });
+      form.reset({ mp_access_token: "" });
+      setEditing(false);
+      queryClient.invalidateQueries({ queryKey: ["workspace", userId] });
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast({
+        title: "Erro ao salvar token",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isLoading = workspaceQuery.isLoading;
+  const currentToken = workspaceQuery.data?.mp_access_token ?? null;
+  const showInput = !currentToken || editing;
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">
+            Integração financeira — Mercado Pago
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Cole seu Access Token de produção. Ele é usado para criar as cobranças dos seus cofres.
+          </p>
+        </div>
+        <KeyRound className="h-4 w-4 text-muted-foreground" />
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-9 w-full" />
+      ) : (
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))}
+            className="space-y-4"
+          >
+            {!showInput && currentToken && (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
+                <code className="font-mono text-sm text-foreground">
+                  {maskToken(currentToken)}
+                </code>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                >
+                  Substituir token
+                </Button>
+              </div>
+            )}
+
+            {showInput && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="mp_access_token"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Access Token</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          autoComplete="off"
+                          placeholder="APP_USR-..."
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex justify-end gap-2">
+                  {currentToken && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(false);
+                        form.reset({ mp_access_token: "" });
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
+                  <Button type="submit" disabled={saveMutation.isPending}>
+                    {saveMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Salvar integração
+                  </Button>
+                </div>
+              </>
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              Seu token é armazenado de forma segura e nunca é exposto no navegador após salvo.
+            </p>
+          </form>
+        </Form>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// Plano (placeholder SaaS)
+// ============================================================
+
+function PlanCard() {
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-foreground">Plano Pro</h2>
+            <span className="rounded-full bg-vault/15 px-2 py-0.5 text-[11px] font-medium text-vault">
+              <Sparkles className="mr-1 inline h-3 w-3" />
+              Beta
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cobrança de assinatura chega na V1.0. Por enquanto, todos os recursos estão liberados.
+          </p>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button variant="secondary" size="sm" disabled>
+                  Gerenciar plano
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Em breve</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    </section>
   );
 }
