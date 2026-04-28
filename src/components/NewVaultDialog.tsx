@@ -50,6 +50,17 @@ const schema = z.object({
     .trim()
     .min(2, "Informe o nome do cliente.")
     .max(80, "Máximo de 80 caracteres."),
+  client_email: z
+    .string()
+    .trim()
+    .email("E-mail inválido.")
+    .max(120, "Máximo de 120 caracteres."),
+  client_whatsapp: z
+    .string()
+    .trim()
+    .max(20, "Máximo de 20 caracteres.")
+    .optional()
+    .or(z.literal("")),
   price_masked: z
     .string()
     .min(1, "Informe o valor.")
@@ -83,6 +94,8 @@ export function NewVaultDialog() {
     defaultValues: {
       title: "",
       client_name: "",
+      client_email: "",
+      client_whatsapp: "",
       price_masked: "",
       status: "pending",
     },
@@ -123,11 +136,14 @@ export function NewVaultDialog() {
       const price = parseBRLToNumber(values.price_masked);
 
       // 1. Insert vault
+      const whatsapp = values.client_whatsapp?.trim();
       const { data: vault, error: insertErr } = await supabase
         .from("vaults")
         .insert({
           title: values.title.trim(),
           client_name: values.client_name.trim(),
+          client_email: values.client_email.trim(),
+          client_whatsapp: whatsapp ? whatsapp : null,
           price,
           status: values.status,
           owner_id: user.id,
@@ -247,6 +263,52 @@ export function NewVaultDialog() {
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="client_email"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs text-muted-foreground">
+                      E-mail do cliente
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="cliente@email.com"
+                        className="bg-background"
+                        disabled={mutation.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="client_whatsapp"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs text-muted-foreground">
+                      WhatsApp <span className="text-muted-foreground/60">(opcional)</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="tel"
+                        placeholder="(11) 99999-9999"
+                        className="bg-background"
+                        disabled={mutation.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <FormField

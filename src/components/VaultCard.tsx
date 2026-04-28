@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,17 @@ export function VaultCard({ vault }: VaultCardProps) {
         variant: "destructive",
       });
     }
+  }
+
+  function handleWhatsApp() {
+    const link = `${window.location.origin}/pay/${vault.public_slug}`;
+    const text = `Olá! Preparei o arquivo do seu projeto. Acesse o link seguro para realizar o pagamento e liberar o download: ${link}`;
+    const encoded = encodeURIComponent(text);
+    const digits = vault.client_whatsapp?.replace(/\D/g, "") ?? "";
+    const url = digits
+      ? `https://wa.me/55${digits}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   const deleteMutation = useMutation({
@@ -140,19 +151,32 @@ export function VaultCard({ vault }: VaultCardProps) {
         {formatBRL(Number(vault.price))}
       </p>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleCopy}
-        className="w-full"
-      >
-        {copied ? (
-          <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
-        ) : (
-          <Link2 className="mr-1.5 h-3.5 w-3.5" />
-        )}
-        {copied ? "Link copiado" : "Copiar link"}
-      </Button>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCopy}
+          className="w-full"
+        >
+          {copied ? (
+            <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
+          ) : (
+            <Link2 className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {copied ? "Link copiado" : "Copiar link"}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleWhatsApp}
+          aria-label="Compartilhar via WhatsApp"
+          title="Compartilhar via WhatsApp"
+          className="px-2.5 text-success hover:text-success"
+        >
+          <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.25} />
+        </Button>
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={(o) => !deleteMutation.isPending && setConfirmOpen(o)}>
         <AlertDialogContent className="bg-card">
