@@ -140,12 +140,13 @@ export function NewVaultDialog() {
 
       // 1. Insert vault
       const whatsapp = values.client_whatsapp?.trim();
+      const clientEmail = values.client_email.trim();
       const { data: vault, error: insertErr } = await supabase
         .from("vaults")
         .insert({
           title: values.title.trim(),
           client_name: values.client_name.trim(),
-          client_email: values.client_email.trim(),
+          client_email: clientEmail,
           client_whatsapp: whatsapp ? whatsapp : null,
           price,
           status: values.status,
@@ -176,14 +177,35 @@ export function NewVaultDialog() {
         if (updErr) throw updErr;
       }
 
-      return vault;
+      // 4. Optional: dispara e-mail inicial. NÃO falha o cofre se o e-mail falhar.
+      let emailError: string | null = null;
+      if (values.notify_client && clientEmail) {
+        try {
+          const { error: fnErr } = await supabase.functions.invoke(
+            "send-vault-created",
+            { body: { vault_id: vault.id } },
+          );
+          if (fnErr) emailError = fnErr.message;
+        } catch (e) {
+          emailError = e instanceof Error ? e.message : "erro desconhecido";
+        }
+      }
+
+      return { vault, emailError };
     },
-    onSuccess: () => {
+    onSuccess: ({ emailError }) => {
       queryClient.invalidateQueries({ queryKey: ["vaults"] });
-      toast({
-        title: "Cofre criado",
-        description: "Seu cofre foi salvo com sucesso.",
-      });
+      if (emailError) {
+        toast({
+          title: "Cofre criado",
+          description: "Não foi possível enviar o e-mail agora. Você pode reenviar manualmente.",
+        });
+      } else {
+        toast({
+          title: "Cofre criado",
+          description: "Seu cofre foi salvo com sucesso.",
+        });
+      }
       resetAll();
       setOpen(false);
     },
