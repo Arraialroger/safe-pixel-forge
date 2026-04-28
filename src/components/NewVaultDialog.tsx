@@ -267,6 +267,52 @@ export function NewVaultDialog() {
             <div className="grid grid-cols-2 gap-3">
               <FormField
                 control={form.control}
+                name="client_email"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs text-muted-foreground">
+                      E-mail do cliente
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="cliente@email.com"
+                        className="bg-background"
+                        disabled={mutation.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="client_whatsapp"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs text-muted-foreground">
+                      WhatsApp <span className="text-muted-foreground/60">(opcional)</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="tel"
+                        placeholder="(11) 99999-9999"
+                        className="bg-background"
+                        disabled={mutation.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
                 name="price_masked"
                 render={({ field }) => (
                   <FormItem className="space-y-1.5">
