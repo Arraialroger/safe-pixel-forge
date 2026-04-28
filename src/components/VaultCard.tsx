@@ -49,6 +49,7 @@ export function VaultCard({ vault }: VaultCardProps) {
         description: "Copie manualmente: " + url,
         variant: "destructive",
       });
+    }
   }
 
   function handleWhatsApp() {
@@ -60,7 +61,6 @@ export function VaultCard({ vault }: VaultCardProps) {
       ? `https://wa.me/55${digits}?text=${encoded}`
       : `https://wa.me/?text=${encoded}`;
     window.open(url, "_blank", "noopener,noreferrer");
-  }
   }
 
   const deleteMutation = useMutation({
