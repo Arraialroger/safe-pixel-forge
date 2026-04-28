@@ -36,6 +36,7 @@ import { toast } from "@/hooks/use-toast";
 import { VaultStatus } from "@/data/mockVaults";
 import { formatBRLInput, parseBRLToNumber } from "@/lib/currency";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -70,6 +71,7 @@ const schema = z.object({
       "Valor muito alto."
     ),
   status: z.enum(["pending", "paid"]),
+  notify_client: z.boolean().default(true),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -98,6 +100,7 @@ export function NewVaultDialog() {
       client_whatsapp: "",
       price_masked: "",
       status: "pending",
+      notify_client: true,
     },
   });
 
