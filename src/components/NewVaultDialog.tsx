@@ -478,7 +478,7 @@ export function NewVaultDialog() {
             />
 
             <DialogFooter className="pt-2">
-
+              <Button
                 type="button"
                 variant="ghost"
                 onClick={() => setOpen(false)}
