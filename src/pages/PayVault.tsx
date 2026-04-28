@@ -1,6 +1,6 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,8 @@ import { Logo } from "@/components/Logo";
 import { formatBRL, statusLabel, VaultStatus } from "@/data/mockVaults";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
 interface PublicVault {
   id: string;
@@ -21,6 +23,9 @@ interface PublicVault {
 
 export default function PayVault() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const mpStatus = searchParams.get("status");
+  const isProcessingFromUrl = !!mpStatus && PROCESSING_STATUSES.has(mpStatus);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["public-vault", slug],
@@ -33,6 +38,13 @@ export default function PayVault() {
         .maybeSingle();
       if (error) throw error;
       return data as PublicVault | null;
+    },
+    // Enquanto está em "processando", faz polling para flipar para Sucesso quando o webhook confirmar.
+    refetchInterval: (query) => {
+      const v = query.state.data as PublicVault | null | undefined;
+      if (!v) return false;
+      if (v.status === "paid") return false;
+      return isProcessingFromUrl ? 10_000 : false;
     },
   });
 
