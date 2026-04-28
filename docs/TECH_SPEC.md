@@ -54,10 +54,12 @@ Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
 ## Fluxo de Criação de Cofre
 
 `NewVaultDialog` (autenticado):
-1. Form validado por Zod (`title`, `client_name`, `client_email`, `client_whatsapp?`, `price`, `status`).
+1. Form validado por Zod (`title`, `client_name`, `client_email`, `client_whatsapp?`, `price`, `status`, `notify_client`).
 2. Insere linha em `vaults`.
 3. Se houver arquivo, faz upload em `vault-files` no path `${user.id}/${vault.id}/${nome}`; em caso de erro, faz rollback do insert.
-4. Atualiza `file_path` e `file_name`. Invalida `["vaults"]`.
+4. Atualiza `file_path` e `file_name`.
+5. Se `notify_client === true` e há `client_email`, invoca a Edge Function `send-vault-created`. Falha do e-mail é **não-fatal**: o cofre é mantido e o toast indica que o envio falhou.
+6. Invalida `["vaults"]`.
 
 ## Fluxo de Compartilhamento (`VaultCard`)
 
