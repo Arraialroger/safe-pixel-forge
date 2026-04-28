@@ -65,6 +65,9 @@ Deno.serve(async (req) => {
     const origin =
       req.headers.get("origin") ?? `https://${vault.public_slug}.lovable.app`;
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const notificationUrl = `${supabaseUrl}/functions/v1/mp-webhook?vault_id=${vault.id}`;
+
     const preferenceBody = {
       items: [
         {
@@ -81,6 +84,7 @@ Deno.serve(async (req) => {
         pending: `${origin}/pay/${vault.public_slug}?status=pending`,
       },
       auto_return: "approved",
+      notification_url: notificationUrl,
     };
 
     const mpRes = await fetch(

@@ -1,1 +1,10 @@
 project_id = "ymqrbxiqtadliydzqldj"
+
+[functions.create-payment]
+verify_jwt = false
+
+[functions.mp-webhook]
+verify_jwt = false
+
+[functions.get-download-url]
+verify_jwt = false
