@@ -288,3 +288,16 @@ function ProcessingCard({ vault }: { vault: PublicVault }) {
     </article>
   );
 }
+
+function CheckoutHeader({ ownerId }: { ownerId: string | null }) {
+  const { logoUrl, displayName } = usePublicOwnerBranding(ownerId);
+  return (
+    <div className="mb-8">
+      <Logo
+        size="md"
+        customLogoUrl={logoUrl}
+        customLogoAlt={displayName ?? undefined}
+      />
+    </div>
+  );
+}
