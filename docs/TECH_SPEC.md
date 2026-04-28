@@ -14,9 +14,10 @@ Fonte da verdade do projeto. Atualizar ao final de cada fase.
 ## Estrutura do Banco (Supabase)
 
 ### `profiles`
-Dados estendidos do usuário autenticado.
+Dados estendidos do usuário autenticado. Populada automaticamente pelo trigger `handle_new_user` no Sign Up.
 - `id` (uuid, PK), `full_name`, `email`, `custom_logo_url`, `created_at`
-- **RLS**: cada usuário gerencia apenas o próprio registro (`id = auth.uid()`).
+- `custom_logo_url` é exibida na Sidebar (autenticado) e na página pública de checkout (`/pay/:slug`) substituindo a logo padrão do PixelSafe.
+- **RLS**: owner-only (`id = auth.uid()`). Leitura pública é feita exclusivamente via Edge Function `get-owner-branding` (com `service_role`), retornando apenas `custom_logo_url` e `full_name`.
 
 ### `vaults`
 Cofre = entrega de projeto + cobrança vinculada.
@@ -31,12 +32,16 @@ Cofre = entrega de projeto + cobrança vinculada.
   - `Public can read vaults`: SELECT para `anon` e `authenticated` (necessário para o checkout público funcionar pelo slug).
 
 ### `workspaces`
-Configurações por dono — guarda credenciais sensíveis do vendedor.
+Configurações por dono — guarda credenciais sensíveis do vendedor. Populada automaticamente pelo trigger `handle_new_user`.
 - `id` (uuid, PK), `owner_id`, `mp_access_token`, `created_at`
 - **RLS**: owner-only (`owner_id = auth.uid()`).
 
 ### Storage
 - Bucket **`vault-files`** (privado). Layout: `${user_id}/${vault_id}/${nome_seguro}`.
+- Bucket **`logos`** (público). Layout: `${user_id}/logo_imagem.{ext}`.
+  - Policies em `storage.objects`: `INSERT`/`UPDATE`/`DELETE` permitidos apenas quando `bucket_id = 'logos' AND (storage.foldername(name))[1] = auth.uid()::text`.
+  - **Sem policy de SELECT** — leitura é feita exclusivamente via URL pública servida pelo CDN (não permite enumeração/listagem do bucket).
+  - URL salva em `profiles.custom_logo_url` recebe sufixo `?v={timestamp}` para cache-busting após upload.
 
 ## Rotas
 
@@ -46,7 +51,7 @@ Configurações por dono — guarda credenciais sensíveis do vendedor.
 | `/login` | público | Autenticação Supabase |
 | `/pay/:slug` | público | Checkout do cofre pelo `public_slug` |
 | `/dashboard` | autenticado | Lista de cofres do owner |
-| `/configuracoes` | autenticado | Configurações (mock — Mercado Pago) |
+| `/configuracoes` | autenticado | Multi-tenant: edição de perfil, upload de logo, integração Mercado Pago e plano (placeholder SaaS) |
 | `*` | público | NotFound |
 
 Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
@@ -116,10 +121,30 @@ Entrada: `{ vault_id: uuid }`. Disparada pelo `NewVaultDialog` após criar o cof
    - CTA → `${PUBLIC_APP_URL}/pay/${public_slug}`.
 5. Falha de envio retorna 502; o frontend trata como warning não-bloqueante.
 
+### `get-owner-branding`
+Endpoint público usado pelo checkout (`/pay/:slug`) para renderizar a logo customizada do dono do cofre sem expor a tabela `profiles`.
+- Entrada: `{ owner_id: uuid }` (validado por Zod).
+- `verify_jwt = false`. Cliente Supabase com `SERVICE_ROLE_KEY`.
+- Retorna **somente** `{ custom_logo_url, full_name }` — nenhum outro campo de `profiles` é exposto.
+
 ### Variáveis de ambiente (Edge Functions)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (gerenciadas).
 - `RESEND_API_KEY` (configurada).
 - `PUBLIC_APP_URL` (opcional, fallback hardcoded para a URL publicada).
+
+## Página `/configuracoes` (multi-tenant)
+
+Tela 100% baseada em dados reais (TanStack Query) da conta autenticada.
+
+- **Card "Perfil e marca"**: lê/edita `profiles.full_name` e gerencia upload de logo no bucket `logos` (path `${user.id}/logo_imagem.{ext}`, `upsert: true`). Após upload, salva URL pública com cache-busting (`?v=${Date.now()}`) em `profiles.custom_logo_url`. Suporta remoção da logo.
+- **Card "Integração financeira — Mercado Pago"**: lê/edita `workspaces.mp_access_token`. Quando já existe um token, exibe apenas `APP_USR-••••-{4_últimos}` em fonte monoespaçada com botão "Substituir token". Input sempre `type="password"`.
+- **Card "Plano"**: placeholder visual ("Beta") com texto indicando que a cobrança SaaS chega na V1.0. Botão "Gerenciar plano" desabilitado com tooltip "Em breve".
+
+Hook compartilhado `src/hooks/useBranding.ts`:
+- `useOwnerBranding()` — para a Sidebar autenticada (lê `profiles` direto via RLS owner-only).
+- `usePublicOwnerBranding(ownerId)` — para o checkout público (chama `get-owner-branding`).
+
+A `Logo` (`src/components/Logo.tsx`) aceita `customLogoUrl`; se presente, renderiza `<img>` no lugar do ícone padrão.
 
 ## Estados da página `/pay/:slug`
 
@@ -131,11 +156,13 @@ A página lê o status do cofre no Supabase + o query param `?status=` adicionad
 | `pending` | `pending` / `in_process` / `in_mediation` | **ProcessingCard** (âmbar, sem botão de pagar; faz polling a cada 10s para flipar quando o webhook confirmar) |
 | `pending` | ausente / outro | **CheckoutCard** (botão "Pagar e Liberar Arquivo") |
 
+O header da página renderiza a logo customizada do owner (via `usePublicOwnerBranding(vault.owner_id)`) quando configurada — co-branding agência/PixelSafe (rodapé continua com "Protegido por PixelSafe").
+
 A `ProcessingCard` exibe a mensagem: _"Recebemos o seu pedido! Estamos aguardando a confirmação do Mercado Pago. Assim que o pagamento for processado (boletos podem levar até 2 dias úteis), o arquivo será liberado aqui e enviaremos um aviso para o seu e-mail."_
 
 ## Pendências (próximas fases)
 
-- Substituir mock da página de Configurações por persistência real do `mp_access_token` em `workspaces`.
+- Cobrança de assinatura SaaS (V1.0) — integração de billing no card "Plano".
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
 - Reenvio manual do e-mail de liberação / criação a partir do dashboard.
 

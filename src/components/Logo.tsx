@@ -5,16 +5,37 @@ interface LogoProps {
   className?: string;
   showText?: boolean;
   size?: "sm" | "md" | "lg";
+  customLogoUrl?: string | null;
+  customLogoAlt?: string;
 }
 
 const sizes = {
-  sm: { icon: "h-4 w-4", text: "text-sm" },
-  md: { icon: "h-5 w-5", text: "text-base" },
-  lg: { icon: "h-6 w-6", text: "text-lg" },
+  sm: { icon: "h-4 w-4", text: "text-sm", img: "h-7" },
+  md: { icon: "h-5 w-5", text: "text-base", img: "h-8" },
+  lg: { icon: "h-6 w-6", text: "text-lg", img: "h-10" },
 };
 
-export function Logo({ className, showText = true, size = "md" }: LogoProps) {
+export function Logo({
+  className,
+  showText = true,
+  size = "md",
+  customLogoUrl,
+  customLogoAlt,
+}: LogoProps) {
   const s = sizes[size];
+
+  if (customLogoUrl) {
+    return (
+      <div className={cn("flex items-center", className)}>
+        <img
+          src={customLogoUrl}
+          alt={customLogoAlt ?? "Logo"}
+          className={cn(s.img, "w-auto max-w-[160px] object-contain")}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background">
