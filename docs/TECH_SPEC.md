@@ -217,9 +217,49 @@ Acima da grid de cofres, `StatsCards` (`src/components/StatsCards.tsx`) renderiz
 
 Os cards só aparecem quando `vaults.length > 0` (evita métricas zeradas no empty state).
 
+## Fase 8 — Monetização SaaS via Asaas
+
+Plano único **Pro** (R$ 39,00/mês) com cobrança recorrente Asaas. Pix, boleto e cartão (`billingType: "UNDEFINED"` permite o cliente escolher na invoice page).
+
+### Schema (`profiles`)
+- `asaas_customer_id` (text, nullable) — ID do customer no Asaas.
+- `asaas_subscription_id` (text, nullable) — ID da subscription.
+- `subscription_status` (text, default `'inactive'`) — valores usados: `active`, `overdue`, `inactive`.
+
+Customer/Subscription são criados **lazy**, somente quando o usuário inicia o checkout pela primeira vez. Contas que nunca tentaram assinar não consomem recursos no Asaas.
+
+### Edge Function `asaas-checkout` (`verify_jwt = true`)
+Idempotente:
+1. Valida JWT via `getClaims()`, lê `userId`.
+2. Busca `profiles`. Se `asaas_customer_id` vazio → `POST /customers` (`access_token` header) e persiste.
+3. Se `asaas_subscription_id` vazio → `POST /subscriptions` (`value: 39`, `cycle: MONTHLY`, `nextDueDate: hoje+1`, `externalReference: userId`) e persiste.
+4. `GET /subscriptions/{id}/payments` → escolhe a fatura `PENDING/OVERDUE` mais recente, ou a primeira disponível.
+5. Retorna `{ invoiceUrl, customerId, subscriptionId, alreadyActive }`.
+- Base URL resolvida pelo secret `ASAAS_ENV` (`sandbox` → `api-sandbox.asaas.com`, `production` → `api.asaas.com`).
+
+### Edge Function `asaas-webhook` (`verify_jwt = false`)
+- Autenticação: header `asaas-access-token` deve bater com o secret `ASAAS_WEBHOOK_TOKEN`. Falha → 401. Sucesso → sempre 200 (evita reentrega infinita).
+- Localiza o `profile` por `asaas_customer_id` (preferido) ou `asaas_subscription_id` (fallback).
+- Mapeamento de evento → `subscription_status`:
+  - `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_RECEIVED_IN_CASH`, `PAYMENT_APPROVED_BY_RISK_ANALYSIS` → `active`
+  - `PAYMENT_OVERDUE` → `overdue`
+  - `PAYMENT_DELETED`, `PAYMENT_REFUNDED`, `PAYMENT_REFUND_IN_PROGRESS`, `PAYMENT_CHARGEBACK_REQUESTED`, `PAYMENT_CHARGEBACK_DISPUTE`, `PAYMENT_REPROVED_BY_RISK_ANALYSIS`, `SUBSCRIPTION_DELETED`, `SUBSCRIPTION_INACTIVATED` → `inactive`
+  - Demais eventos: ignorados (200 ok).
+- **URL a configurar no painel Asaas**: `https://ymqrbxiqtadliydzqldj.supabase.co/functions/v1/asaas-webhook` com header `asaas-access-token`.
+
+### Frontend
+- **`useSubscription`** (`src/hooks/useSubscription.ts`): lê `profiles.subscription_status` via TanStack Query (`["subscription", userId]`). Expõe `isActive`, `isOverdue`, `refetch`.
+- **`Settings → PlanCard`**: card real do Plano Pro.
+  - `inactive`: botão **Assinar Plano Pro** chama `asaas-checkout` e abre `invoiceUrl` em nova aba.
+  - `overdue`: badge âmbar + botão **Pagar fatura** (mesmo fluxo, devolve a fatura overdue).
+  - `active`: badge verde + **Gerenciar assinatura** abre o portal do cliente Asaas (`sandbox.asaas.com/customerInvoices` ou `www.asaas.com/customerInvoices`).
+  - Botão **Atualizar status** força `refetch()` após o pagamento.
+- **Catraca PLG (`NewVaultDialog`)**: além do `count >= FREE_PLAN_LIMIT`, agora exige `!subscriptionActive`. Assinante pode criar cofres ilimitados. Botão "Assinar agora" do `AlertDialog` redireciona para `/configuracoes`. A defesa em profundidade na `mutationFn` aplica a mesma regra.
+- **Banner global (`AuthenticatedLayout`)**: se `isOverdue`, renderiza barra âmbar acima do `<main>` com CTA "Regularizar" → `/configuracoes`.
+
 ## Pendências (próximas fases)
 
-- Cobrança de assinatura SaaS (V1.0) — integração Asaas no card "Plano" + ligação do botão "Entendi" da catraca PLG ao checkout.
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
 - **Fase 7.6 — Hardening de isolamento na tabela `vaults`**: substituir a política `Public can read vaults` (`USING (true)`) por uma VIEW `vaults_public` com `security_invoker=on` expondo apenas as colunas necessárias ao checkout (`id`, `public_slug`, `title`, `price`, `client_name`, `status`, `custom_logo_url` do owner) e bloquear o `SELECT` direto da tabela base para `anon`. Isso elimina a dependência exclusiva do filtro client-side `.eq("owner_id", ...)` (hoje aplicado em Dashboard, Clients e Catraca PLG como defesa em profundidade) e impede qualquer vazamento futuro caso uma nova tela esqueça o filtro.
+- Revogar `asaas_subscription_id` no Asaas (`DELETE /subscriptions/{id}`) caso o usuário cancele dentro do app — hoje o cancelamento é feito apenas pelo portal do cliente Asaas.
 
