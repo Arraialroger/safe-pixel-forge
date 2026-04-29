@@ -111,7 +111,8 @@ export function NewVaultDialog() {
     queryFn: async () => {
       const { count, error } = await supabase
         .from("vaults")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", user!.id);
       if (error) throw error;
       return count ?? 0;
     },
