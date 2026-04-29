@@ -279,7 +279,7 @@ export function NewVaultDialog() {
 
   return (
     <>
-      <Button onClick={handleNewClick}>
+      <Button onClick={handleNewClick} className="w-full sm:w-auto">
         <Plus className="mr-1.5 h-4 w-4" />
         Novo Cofre
       </Button>
@@ -314,7 +314,7 @@ export function NewVaultDialog() {
           if (!o) resetAll();
         }}
       >
-        <DialogContent className="bg-card sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto bg-card sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Novo cofre</DialogTitle>
             <DialogDescription>
@@ -366,7 +366,7 @@ export function NewVaultDialog() {
               )}
             />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="client_email"
@@ -427,7 +427,7 @@ export function NewVaultDialog() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="price_masked"
