@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Cofres
@@ -36,13 +36,15 @@ export default function Dashboard() {
             Gerencie as entregas e pagamentos dos seus projetos.
           </p>
         </div>
-        <NewVaultDialog />
+        <div className="w-full sm:w-auto">
+          <NewVaultDialog />
+        </div>
       </header>
 
       {isLoading && (
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[140px] w-full rounded-lg" />
+            <Skeleton key={i} className="h-[140px] w-full rounded-2xl" />
           ))}
         </section>
       )}
