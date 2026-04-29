@@ -20,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
 import { useAuthReady } from "@/hooks/useAuthReady";
+import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 
 // ----- Schemas -----
@@ -514,38 +515,130 @@ function MercadoPagoCard({ userId }: { userId: string }) {
 }
 
 // ============================================================
-// Plano (placeholder SaaS)
+// Plano (Asaas)
 // ============================================================
 
 function PlanCard() {
+  const { status, isActive, isOverdue, isLoading, refetch } = useSubscription();
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const asaasEnv = (import.meta.env.VITE_ASAAS_ENV ?? "sandbox") as string;
+  const customerPortalUrl =
+    asaasEnv === "production"
+      ? "https://www.asaas.com/customerInvoices"
+      : "https://sandbox.asaas.com/customerInvoices";
+
+  async function handleCheckout() {
+    setCheckoutLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("asaas-checkout", {
+        body: {},
+      });
+      if (error) throw error;
+      const invoiceUrl = (data as { invoiceUrl?: string } | null)?.invoiceUrl;
+      if (!invoiceUrl) {
+        toast({
+          title: "Fatura ainda não disponível",
+          description: "Aguarde alguns segundos e tente novamente.",
+        });
+        return;
+      }
+      window.open(invoiceUrl, "_blank", "noopener,noreferrer");
+      toast({
+        title: "Fatura aberta",
+        description: "Após o pagamento, clique em 'Atualizar status'.",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Tente novamente.";
+      toast({
+        title: "Erro ao iniciar checkout",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }
+
+  let badge: { label: string; cls: string } | null = null;
+  if (isActive) badge = { label: "Assinatura ativa", cls: "bg-emerald-500/15 text-emerald-500" };
+  else if (isOverdue) badge = { label: "Pagamento em atraso", cls: "bg-amber-500/15 text-amber-500" };
+
+  const description = isActive
+    ? "Você tem cofres ilimitados. Gerencie suas faturas e dados de pagamento na área do cliente Asaas."
+    : isOverdue
+      ? "Sua assinatura está pendente de pagamento. Pague a fatura em aberto para reativar a criação de cofres."
+      : "Crie cofres ilimitados por R$ 39/mês. Pague via Pix, boleto ou cartão — você escolhe na hora do checkout.";
+
   return (
     <section className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="flex-1">
           <div className="mb-2 flex items-center gap-2">
             <h2 className="text-sm font-semibold text-foreground">Plano Pro</h2>
-            <span className="rounded-full bg-vault/15 px-2 py-0.5 text-[11px] font-medium text-vault">
-              <Sparkles className="mr-1 inline h-3 w-3" />
-              Beta
-            </span>
+            {badge ? (
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+                {badge.label}
+              </span>
+            ) : (
+              <span className="rounded-full bg-vault/15 px-2 py-0.5 text-[11px] font-medium text-vault">
+                <Sparkles className="mr-1 inline h-3 w-3" />
+                R$ 39/mês
+              </span>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Cobrança de assinatura chega na V1.0. Por enquanto, todos os recursos estão liberados.
+            {isLoading ? "Carregando status da assinatura..." : description}
           </p>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0}>
-                <Button variant="secondary" size="sm" disabled>
-                  Gerenciar plano
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Em breve</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {isActive ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => window.open(customerPortalUrl, "_blank", "noopener,noreferrer")}
+            >
+              Gerenciar assinatura
+            </Button>
+          ) : isOverdue ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={checkoutLoading}
+              >
+                Atualizar status
+              </Button>
+              <Button size="sm" onClick={handleCheckout} disabled={checkoutLoading}>
+                {checkoutLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                Pagar fatura
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={checkoutLoading}
+              >
+                Atualizar status
+              </Button>
+              <Button size="sm" onClick={handleCheckout} disabled={checkoutLoading || isLoading}>
+                {checkoutLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                Assinar Plano Pro
+              </Button>
+            </>
+          )}
+        </div>
       </div>
+      {status && status !== "active" && status !== "overdue" && status !== "inactive" ? (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Status atual: <code className="font-mono">{status}</code>
+        </p>
+      ) : null}
     </section>
   );
 }
