@@ -34,6 +34,7 @@ Cofre = entrega de projeto + cobrança vinculada.
 ### `workspaces`
 Configurações por dono — guarda credenciais sensíveis do vendedor. Populada automaticamente pelo trigger `handle_new_user`.
 - `id` (uuid, PK), `owner_id`, `mp_access_token`, `created_at`
+- **Constraint**: `UNIQUE (mp_access_token)` — um mesmo Access Token do Mercado Pago não pode ser vinculado a mais de uma conta no PixelSafe (regra antifraude contra múltiplas contas do mesmo vendedor). O frontend (`Settings → MercadoPagoCard`) intercepta o erro Postgres `23505` e mostra um toast amigável: _"Este token do Mercado Pago já está vinculado a outra conta no PixelSafe."_
 - **RLS**: owner-only (`owner_id = auth.uid()`).
 
 ### Storage
@@ -59,7 +60,8 @@ Convenção de query keys (evita colisão entre componentes que selecionam shape
 | `/` | público | Landing |
 | `/login` | público | Autenticação Supabase |
 | `/pay/:slug` | público | Checkout do cofre pelo `public_slug` |
-| `/dashboard` | autenticado | Lista de cofres do owner |
+| `/dashboard` | autenticado | Lista de cofres do owner + KPIs financeiros |
+| `/clientes` | autenticado | Mini-CRM derivado dos cofres (sem tabela própria) |
 | `/configuracoes` | autenticado | Multi-tenant: edição de perfil, upload de logo, integração Mercado Pago e plano (placeholder SaaS) |
 | `*` | público | NotFound |
 
@@ -184,8 +186,39 @@ O header da página renderiza a logo customizada do owner (via `usePublicOwnerBr
 
 A `ProcessingCard` exibe a mensagem: _"Recebemos o seu pedido! Estamos aguardando a confirmação do Mercado Pago. Assim que o pagamento for processado (boletos podem levar até 2 dias úteis), o arquivo será liberado aqui e enviaremos um aviso para o seu e-mail."_
 
+## PLG / Plano gratuito (V0)
+
+Enquanto a cobrança SaaS (Fase 8 / Asaas) não está ativa, vale o limite **`FREE_PLAN_LIMIT = 1` cofre por owner**. A catraca vive no `NewVaultDialog`:
+
+- Hook `useQuery({ queryKey: ["vaults-count", userId], head: true, count: "exact" })` calcula a contagem com 1 round-trip barato (sem trazer linhas) já filtrado pela RLS.
+- O botão "Novo Cofre" deixa de ser `DialogTrigger` direto. O `onClick` chama `handleNewClick()`: se `count >= FREE_PLAN_LIMIT`, abre um `AlertDialog` ("Limite do plano gratuito atingido") em vez do modal de criação. O botão "Entendi" apenas fecha (Fase 8 ligará no checkout Asaas).
+- **Defesa em profundidade**: a `mutationFn` refaz o `count` antes do `INSERT` e aborta com mensagem amigável caso uma corrida entre abas tenha furado o guard do frontend.
+- A `onSuccess` invalida `["vaults-count", userId]` além de `["vaults"]`.
+
+A enforcement definitiva (RLS / edge function checando `subscription_status`) chega na Fase 8.
+
+## Mini-CRM (`/clientes`)
+
+**Sem tabela nova.** A página deriva os contatos em memória a partir do mesmo cache TanStack Query usado pelo Dashboard (`["vaults", userId]`):
+
+- Reduz os vaults agrupando por `client_email.toLowerCase()` como chave única.
+- Cada linha exibe: Nome, E-mail, WhatsApp formatado (`formatBRPhone`) com botão `wa.me/55{digits}` em nova aba, e Total de projetos (contagem de cofres com aquele e-mail).
+- Vaults sem `client_email` são ignorados.
+- Empty state quando não há contatos: mensagem + CTA para o Dashboard.
+- Custo no banco: **zero queries adicionais** quando o usuário já passou pelo Dashboard.
+
+## KPIs do Dashboard
+
+Acima da grid de cofres, `StatsCards` (`src/components/StatsCards.tsx`) renderiza 3 cards derivados em `useMemo` da mesma lista de vaults — sem query extra:
+
+- **Total recebido**: soma `price` onde `status = 'paid'` (formato BRL).
+- **Aguardando pagamento**: soma `price` onde `status = 'pending'` (formato BRL).
+- **Projetos entregues**: contagem de vaults com `status = 'paid'`.
+
+Os cards só aparecem quando `vaults.length > 0` (evita métricas zeradas no empty state).
+
 ## Pendências (próximas fases)
 
-- Cobrança de assinatura SaaS (V1.0) — integração de billing no card "Plano".
+- Cobrança de assinatura SaaS (V1.0) — integração Asaas no card "Plano" + ligação do botão "Entendi" da catraca PLG ao checkout.
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
 

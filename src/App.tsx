@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import Login from "./pages/Login.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Settings from "./pages/Settings.tsx";
+import Clients from "./pages/Clients.tsx";
 import PayVault from "./pages/PayVault.tsx";
 import AuthenticatedLayout from "./layouts/AuthenticatedLayout.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/pay/:slug" element={<PayVault />} />
           <Route element={<AuthenticatedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/clientes" element={<Clients />} />
             <Route path="/configuracoes" element={<Settings />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
