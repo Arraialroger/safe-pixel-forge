@@ -558,8 +558,25 @@ function MercadoPagoCard({ userId }: { userId: string }) {
 // ============================================================
 
 function PlanCard() {
+  const { user } = useAuthReady();
   const { status, isActive, isOverdue, isLoading, refetch } = useSubscription();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const cpfQuery = useQuery({
+    queryKey: ["profile-cpf", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("cpf_cnpj")
+        .eq("id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const hasCpfCnpj = !!(cpfQuery.data?.cpf_cnpj ?? "").trim();
 
   const asaasEnv = (import.meta.env.VITE_ASAAS_ENV ?? "sandbox") as string;
   const customerPortalUrl =
@@ -568,6 +585,15 @@ function PlanCard() {
       : "https://sandbox.asaas.com/customerInvoices";
 
   async function handleCheckout() {
+    if (!hasCpfCnpj) {
+      toast({
+        title: "CPF ou CNPJ obrigatório",
+        description:
+          "Preencha o seu CPF ou CNPJ no card de Perfil acima antes de assinar.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("asaas-checkout", {
