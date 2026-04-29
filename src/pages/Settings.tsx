@@ -111,7 +111,7 @@ function ProfileCard({ userId }: { userId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, email, custom_logo_url")
+        .select("full_name, email, custom_logo_url, cpf_cnpj")
         .eq("id", userId)
         .maybeSingle();
       if (error) throw error;
@@ -121,12 +121,15 @@ function ProfileCard({ userId }: { userId: string }) {
 
   const form = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { full_name: "" },
+    defaultValues: { full_name: "", cpf_cnpj: "" },
   });
 
   useEffect(() => {
     if (profileQuery.data) {
-      form.reset({ full_name: profileQuery.data.full_name ?? "" });
+      form.reset({
+        full_name: profileQuery.data.full_name ?? "",
+        cpf_cnpj: profileQuery.data.cpf_cnpj ?? "",
+      });
     }
   }, [profileQuery.data, form]);
 
