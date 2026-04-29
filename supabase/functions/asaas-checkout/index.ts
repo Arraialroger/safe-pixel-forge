@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     const { data: profile, error: profileErr } = await admin
       .from("profiles")
       .select(
-        "id, full_name, email, asaas_customer_id, asaas_subscription_id, subscription_status",
+        "id, full_name, email, cpf_cnpj, asaas_customer_id, asaas_subscription_id, subscription_status",
       )
       .eq("id", userId)
       .maybeSingle();
@@ -75,6 +75,14 @@ Deno.serve(async (req) => {
     if (profileErr || !profile) {
       console.error("asaas-checkout: profile lookup error", profileErr);
       return json({ error: "Perfil não encontrado." }, 404);
+    }
+
+    const cpfCnpj = (profile.cpf_cnpj ?? "").toString().replace(/\D/g, "");
+    if (cpfCnpj.length !== 11 && cpfCnpj.length !== 14) {
+      return json(
+        { error: "CPF/CNPJ obrigatório. Preencha em Configurações antes de assinar." },
+        400,
+      );
     }
 
     const baseUrl = asaasBaseUrl();
