@@ -339,6 +339,29 @@ function ProfileCard({ userId }: { userId: string }) {
               )}
             />
 
+            {/* CPF / CNPJ */}
+            <FormField
+              control={form.control}
+              name="cpf_cnpj"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CPF ou CNPJ</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-[11px] text-muted-foreground">
+                    Obrigatório para emitir as faturas da sua assinatura PixelSafe Pro.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {/* Email read-only */}
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Email</Label>
