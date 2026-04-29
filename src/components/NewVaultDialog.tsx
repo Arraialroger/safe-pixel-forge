@@ -580,5 +580,6 @@ export function NewVaultDialog() {
         </Form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
