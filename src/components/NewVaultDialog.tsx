@@ -111,7 +111,8 @@ export function NewVaultDialog() {
     queryFn: async () => {
       const { count, error } = await supabase
         .from("vaults")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", user!.id);
       if (error) throw error;
       return count ?? 0;
     },
@@ -176,7 +177,8 @@ export function NewVaultDialog() {
       // Defesa em profundidade: refaz a contagem antes do INSERT.
       const { count: currentCount, error: countErr } = await supabase
         .from("vaults")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true })
+        .eq("owner_id", user.id);
       if (countErr) throw countErr;
       if ((currentCount ?? 0) >= FREE_PLAN_LIMIT) {
         throw new Error(

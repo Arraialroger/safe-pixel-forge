@@ -221,4 +221,5 @@ Os cards só aparecem quando `vaults.length > 0` (evita métricas zeradas no emp
 
 - Cobrança de assinatura SaaS (V1.0) — integração Asaas no card "Plano" + ligação do botão "Entendi" da catraca PLG ao checkout.
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
+- **Fase 7.6 — Hardening de isolamento na tabela `vaults`**: substituir a política `Public can read vaults` (`USING (true)`) por uma VIEW `vaults_public` com `security_invoker=on` expondo apenas as colunas necessárias ao checkout (`id`, `public_slug`, `title`, `price`, `client_name`, `status`, `custom_logo_url` do owner) e bloquear o `SELECT` direto da tabela base para `anon`. Isso elimina a dependência exclusiva do filtro client-side `.eq("owner_id", ...)` (hoje aplicado em Dashboard, Clients e Catraca PLG como defesa em profundidade) e impede qualquer vazamento futuro caso uma nova tela esqueça o filtro.
 

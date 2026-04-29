@@ -36,6 +36,7 @@ export default function Clients() {
       const { data, error } = await supabase
         .from("vaults")
         .select("*")
+        .eq("owner_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as unknown as Vault[];

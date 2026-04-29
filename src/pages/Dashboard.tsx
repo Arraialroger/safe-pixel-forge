@@ -4,20 +4,21 @@ import { NewVaultDialog } from "@/components/NewVaultDialog";
 import { StatsCards } from "@/components/StatsCards";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthReady } from "@/hooks/useAuthReady";
 import { Vault } from "@/data/mockVaults";
 import { EmptyVaults } from "@/components/EmptyVaults";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, isReady } = useAuthReady();
 
   const { data: vaults, isLoading, isError } = useQuery({
     queryKey: ["vaults", user?.id],
-    enabled: !!user,
+    enabled: isReady && !!user?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vaults")
         .select("*")
+        .eq("owner_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as unknown as Vault[];
