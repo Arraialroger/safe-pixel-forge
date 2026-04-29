@@ -1,8 +1,9 @@
-import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import defaultLogo from "@/assets/pixelsafe-logo.png";
 
 interface LogoProps {
   className?: string;
+  /** Mantido por compatibilidade — a logo oficial já contém o wordmark. */
   showText?: boolean;
   size?: "sm" | "md" | "lg";
   customLogoUrl?: string | null;
@@ -10,42 +11,27 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: { icon: "h-4 w-4", text: "text-sm", img: "h-7" },
-  md: { icon: "h-5 w-5", text: "text-base", img: "h-8" },
-  lg: { icon: "h-6 w-6", text: "text-lg", img: "h-10" },
+  sm: "h-7",
+  md: "h-9",
+  lg: "h-12",
 };
 
 export function Logo({
   className,
-  showText = true,
   size = "md",
   customLogoUrl,
   customLogoAlt,
 }: LogoProps) {
-  const s = sizes[size];
-
-  if (customLogoUrl) {
-    return (
-      <div className={cn("flex items-center", className)}>
-        <img
-          src={customLogoUrl}
-          alt={customLogoAlt ?? "Logo"}
-          className={cn(s.img, "w-auto max-w-[160px] object-contain")}
-        />
-      </div>
-    );
-  }
+  const src = customLogoUrl || defaultLogo;
+  const alt = customLogoAlt ?? "PixelSafe";
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background">
-        <Lock className={cn(s.icon, "text-vault")} strokeWidth={2.25} />
-      </span>
-      {showText && (
-        <span className={cn("font-semibold tracking-tight text-foreground", s.text)}>
-          PixelSafe
-        </span>
-      )}
+    <div className={cn("flex items-center", className)}>
+      <img
+        src={src}
+        alt={alt}
+        className={cn(sizes[size], "w-auto max-w-[180px] object-contain")}
+      />
     </div>
   );
 }
