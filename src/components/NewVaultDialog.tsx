@@ -37,6 +37,7 @@ import { VaultStatus } from "@/data/mockVaults";
 import { formatBRLInput, parseBRLToNumber } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatBRPhone, isValidBRPhone, normalizeBRPhone, onlyDigits } from "@/lib/phone";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -59,9 +60,13 @@ const schema = z.object({
   client_whatsapp: z
     .string()
     .trim()
-    .max(20, "Máximo de 20 caracteres.")
+    .max(16, "Número muito longo.")
     .optional()
-    .or(z.literal("")),
+    .or(z.literal(""))
+    .refine(
+      (v) => !v || isValidBRPhone(v),
+      "Use DDD + número, ex.: (11) 99999-9999.",
+    ),
   price_masked: z
     .string()
     .min(1, "Informe o valor.")
@@ -139,7 +144,7 @@ export function NewVaultDialog() {
       const price = parseBRLToNumber(values.price_masked);
 
       // 1. Insert vault
-      const whatsapp = values.client_whatsapp?.trim();
+      const whatsapp = values.client_whatsapp ? normalizeBRPhone(values.client_whatsapp) : "";
       const clientEmail = values.client_email.trim();
       const { data: vault, error: insertErr } = await supabase
         .from("vaults")
@@ -315,23 +320,38 @@ export function NewVaultDialog() {
               <FormField
                 control={form.control}
                 name="client_whatsapp"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-xs text-muted-foreground">
-                      WhatsApp <span className="text-muted-foreground/60">(opcional)</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        inputMode="tel"
-                        placeholder="(11) 99999-9999"
-                        className="bg-background"
-                        disabled={mutation.isPending}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const digits = onlyDigits(field.value ?? "");
+                  const showCounter = digits.length > 0 && !isValidBRPhone(field.value ?? "");
+                  return (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-xs text-muted-foreground">
+                        WhatsApp <span className="text-muted-foreground/60">(opcional)</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          inputMode="tel"
+                          autoComplete="tel"
+                          maxLength={16}
+                          placeholder="(11) 99999-9999"
+                          className="bg-background"
+                          disabled={mutation.isPending}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(formatBRPhone(e.target.value))}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      {showCounter ? (
+                        <p className="text-[10px] text-muted-foreground">
+                          {digits.length}/11 dígitos
+                        </p>
+                      ) : null}
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
 
