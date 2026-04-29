@@ -2,7 +2,7 @@ import { useState, useRef, DragEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, UploadCloud, FileText, X } from "lucide-react";
 import {
   Dialog,
@@ -11,8 +11,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,6 +48,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatBRPhone, isValidBRPhone, normalizeBRPhone, onlyDigits } from "@/lib/phone";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const FREE_PLAN_LIMIT = 1;
 
 const schema = z.object({
   title: z
@@ -91,9 +100,22 @@ export function NewVaultDialog() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const countQuery = useQuery({
+    queryKey: ["vaults-count", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("vaults")
+        .select("id", { count: "exact", head: true });
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -113,6 +135,15 @@ export function NewVaultDialog() {
     form.reset();
     setFile(null);
     setDragActive(false);
+  }
+
+  function handleNewClick() {
+    const c = countQuery.data ?? 0;
+    if (c >= FREE_PLAN_LIMIT) {
+      setPaywallOpen(true);
+      return;
+    }
+    setOpen(true);
   }
 
   function handleFile(f: File | null) {
