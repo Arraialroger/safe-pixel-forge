@@ -78,14 +78,17 @@ Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
 ## Fluxo de Compartilhamento (`VaultCard`)
 
 - **Copiar link**: copia `${origin}/pay/${public_slug}` para o clipboard.
-- **WhatsApp**: abre `https://wa.me/{numero}?text={texto}`. Se `client_whatsapp` preenchido → `55{digits}`; caso contrário, sem destinatário.
+- **WhatsApp (contextual por status)**: abre `https://wa.me/{numero}?text={texto}`. Se `client_whatsapp` preenchido → `55{digits}`; caso contrário, sem destinatário. O texto muda conforme `vault.status`:
+  - `pending` → mensagem de cobrança ("Acesse o link seguro para realizar o pagamento e liberar o download…").
+  - `paid` → mensagem de download ("Pagamento confirmado! Seu arquivo já está disponível para download…").
+- **Reenviar e-mail**: item no `DropdownMenu` (ícone `Mail`, `Loader2` durante `isPending`) que invoca a Edge Function `resend-vault-email`. O backend escolhe o template com base no status atual (cobrança vs liberação). Toast de sucesso/erro com a mensagem retornada.
 - **Excluir**: remove arquivo do storage (best-effort) e a linha em `vaults`. Confirmação via `AlertDialog`.
 
 ## Pagamento — Edge Functions
 
 Em `supabase/functions/`. Configuração de auth em `supabase/config.toml`:
-- `create-payment`, `mp-webhook`, `get-download-url` → `verify_jwt = false` (rotas públicas / chamadas pelo Mercado Pago).
-- `send-vault-created` → `verify_jwt = true` (somente o dono autenticado dispara).
+- `create-payment`, `mp-webhook`, `get-download-url`, `get-owner-branding` → `verify_jwt = false` (rotas públicas / chamadas pelo Mercado Pago).
+- `send-vault-created`, `resend-vault-email` → `verify_jwt = true` (somente o dono autenticado dispara).
 
 ### `create-payment`
 Entrada: `{ vault_id: uuid }`. Fluxo:
@@ -136,6 +139,18 @@ Endpoint público usado pelo checkout (`/pay/:slug`) para renderizar a logo cust
 - `verify_jwt = false`. Cliente Supabase com `SERVICE_ROLE_KEY`.
 - Retorna **somente** `{ custom_logo_url, full_name }` — nenhum outro campo de `profiles` é exposto.
 
+### `resend-vault-email`
+Reenvio manual sob demanda (botão "Reenviar e-mail" no `VaultCard`). `verify_jwt = true`.
+1. Valida JWT via `getClaims` e extrai `claims.sub`.
+2. Body validado por Zod: `{ vault_id: uuid }`.
+3. Carrega vault com service-role; **403** se `vault.owner_id !== claims.sub`.
+4. **400** `{ error: "Cliente sem e-mail cadastrado" }` se `client_email` for null (feedback explícito ao usuário no toast — diferente de `send-vault-created`, que apenas faz `skipped`).
+5. Branch por status:
+   - `pending` → assunto `Arquivo de {title} disponível para liberação 🔐` (template idêntico ao `send-vault-created`).
+   - `paid` → assunto `Seu arquivo "{title}" está liberado! 🔓` (template idêntico ao do `mp-webhook`).
+6. Falha no Resend → **502** `{ error: "Falha ao enviar e-mail" }`.
+7. Sucesso → `{ success: true, kind: "pending" | "paid" }`.
+
 ### Variáveis de ambiente (Edge Functions)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (gerenciadas).
 - `RESEND_API_KEY` (configurada).
@@ -173,5 +188,4 @@ A `ProcessingCard` exibe a mensagem: _"Recebemos o seu pedido! Estamos aguardand
 
 - Cobrança de assinatura SaaS (V1.0) — integração de billing no card "Plano".
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
-- Reenvio manual do e-mail de liberação / criação a partir do dashboard.
 
