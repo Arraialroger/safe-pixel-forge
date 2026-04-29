@@ -30,6 +30,15 @@ const profileSchema = z.object({
     .trim()
     .min(1, "Informe um nome")
     .max(100, "Máximo de 100 caracteres"),
+  cpf_cnpj: z
+    .string()
+    .trim()
+    .min(1, "Informe seu CPF ou CNPJ")
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine(
+      (v) => v.length === 11 || v.length === 14,
+      "Documento inválido. Use 11 dígitos (CPF) ou 14 dígitos (CNPJ).",
+    ),
 });
 type ProfileForm = z.infer<typeof profileSchema>;
 
@@ -102,7 +111,7 @@ function ProfileCard({ userId }: { userId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, email, custom_logo_url")
+        .select("full_name, email, custom_logo_url, cpf_cnpj")
         .eq("id", userId)
         .maybeSingle();
       if (error) throw error;
@@ -112,12 +121,15 @@ function ProfileCard({ userId }: { userId: string }) {
 
   const form = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { full_name: "" },
+    defaultValues: { full_name: "", cpf_cnpj: "" },
   });
 
   useEffect(() => {
     if (profileQuery.data) {
-      form.reset({ full_name: profileQuery.data.full_name ?? "" });
+      form.reset({
+        full_name: profileQuery.data.full_name ?? "",
+        cpf_cnpj: profileQuery.data.cpf_cnpj ?? "",
+      });
     }
   }, [profileQuery.data, form]);
 
@@ -151,7 +163,10 @@ function ProfileCard({ userId }: { userId: string }) {
         nextLogoUrl = pub.publicUrl;
       }
 
-      const update: Record<string, unknown> = { full_name: values.full_name };
+      const update: Record<string, unknown> = {
+        full_name: values.full_name,
+        cpf_cnpj: values.cpf_cnpj,
+      };
       if (nextLogoUrl !== undefined) update.custom_logo_url = nextLogoUrl;
 
       const { error } = await supabase
@@ -167,6 +182,7 @@ function ProfileCard({ userId }: { userId: string }) {
       setLogoVersion(Date.now());
       if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["profile-settings", userId] });
+      queryClient.invalidateQueries({ queryKey: ["profile-cpf", userId] });
       queryClient.invalidateQueries({ queryKey: ["owner-branding", userId] });
       queryClient.invalidateQueries({ queryKey: ["public-owner-branding", userId] });
     },
@@ -318,6 +334,29 @@ function ProfileCard({ userId }: { userId: string }) {
                   <FormControl>
                     <Input placeholder="Seu nome ou nome da agência" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* CPF / CNPJ */}
+            <FormField
+              control={form.control}
+              name="cpf_cnpj"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CPF ou CNPJ</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-[11px] text-muted-foreground">
+                    Obrigatório para emitir as faturas da sua assinatura PixelSafe Pro.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
@@ -519,8 +558,25 @@ function MercadoPagoCard({ userId }: { userId: string }) {
 // ============================================================
 
 function PlanCard() {
+  const { user } = useAuthReady();
   const { status, isActive, isOverdue, isLoading, refetch } = useSubscription();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const cpfQuery = useQuery({
+    queryKey: ["profile-cpf", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("cpf_cnpj")
+        .eq("id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const hasCpfCnpj = !!(cpfQuery.data?.cpf_cnpj ?? "").trim();
 
   const asaasEnv = (import.meta.env.VITE_ASAAS_ENV ?? "sandbox") as string;
   const customerPortalUrl =
@@ -529,6 +585,15 @@ function PlanCard() {
       : "https://sandbox.asaas.com/customerInvoices";
 
   async function handleCheckout() {
+    if (!hasCpfCnpj) {
+      toast({
+        title: "CPF ou CNPJ obrigatório",
+        description:
+          "Preencha o seu CPF ou CNPJ no card de Perfil acima antes de assinar.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("asaas-checkout", {
@@ -634,6 +699,11 @@ function PlanCard() {
           )}
         </div>
       </div>
+      {!isActive && !cpfQuery.isLoading && !hasCpfCnpj ? (
+        <p className="mt-3 text-[11px] text-amber-500">
+          Preencha seu CPF/CNPJ no card de Perfil acima para liberar a assinatura.
+        </p>
+      ) : null}
       {status && status !== "active" && status !== "overdue" && status !== "inactive" ? (
         <p className="mt-3 text-[11px] text-muted-foreground">
           Status atual: <code className="font-mono">{status}</code>

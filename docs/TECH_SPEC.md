@@ -16,6 +16,8 @@ Fonte da verdade do projeto. Atualizar ao final de cada fase.
 ### `profiles`
 Dados estendidos do usuário autenticado. Populada automaticamente pelo trigger `handle_new_user` no Sign Up.
 - `id` (uuid, PK), `full_name`, `email`, `custom_logo_url`, `created_at`
+- `cpf_cnpj` (text, nullable) — documento do dono da conta. **Obrigatório** para o fluxo de assinatura Asaas (Fase 8): a Edge Function `asaas-checkout` valida o campo (11 ou 14 dígitos) e envia como `cpfCnpj` no `POST /customers`. O frontend (`Settings → ProfileCard`) normaliza via Zod (apenas dígitos) antes de salvar; o `PlanCard` bloqueia o botão "Assinar Plano Pro" quando vazio.
+- `asaas_customer_id`, `asaas_subscription_id`, `subscription_status` (default `'inactive'`) — controle da assinatura Asaas (Fase 8).
 - `custom_logo_url` é exibida na Sidebar (autenticado) e na página pública de checkout (`/pay/:slug`) substituindo a logo padrão do PixelSafe.
 - **RLS**: owner-only (`id = auth.uid()`). Leitura pública é feita exclusivamente via Edge Function `get-owner-branding` (com `service_role`), retornando apenas `custom_logo_url` e `full_name`.
 
