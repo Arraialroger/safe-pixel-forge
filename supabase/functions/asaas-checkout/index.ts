@@ -106,6 +106,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           name,
           email,
+          cpfCnpj,
           externalReference: userId,
         }),
       });
