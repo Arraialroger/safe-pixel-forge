@@ -172,6 +172,18 @@ export function NewVaultDialog() {
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
       if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+
+      // Defesa em profundidade: refaz a contagem antes do INSERT.
+      const { count: currentCount, error: countErr } = await supabase
+        .from("vaults")
+        .select("id", { count: "exact", head: true });
+      if (countErr) throw countErr;
+      if ((currentCount ?? 0) >= FREE_PLAN_LIMIT) {
+        throw new Error(
+          "Limite do plano gratuito atingido. Assine o Plano Pro para criar mais cofres.",
+        );
+      }
+
       const price = parseBRLToNumber(values.price_masked);
 
       // 1. Insert vault
@@ -231,6 +243,7 @@ export function NewVaultDialog() {
     },
     onSuccess: ({ emailError }) => {
       queryClient.invalidateQueries({ queryKey: ["vaults"] });
+      queryClient.invalidateQueries({ queryKey: ["vaults-count", user?.id] });
       if (emailError) {
         toast({
           title: "Cofre criado",
@@ -259,27 +272,43 @@ export function NewVaultDialog() {
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (mutation.isPending) return;
-        setOpen(o);
-        if (!o) resetAll();
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Novo Cofre
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="bg-card sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Novo cofre</DialogTitle>
-          <DialogDescription>
-            Crie um cofre para guardar a entrega e o pagamento de um projeto.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button onClick={handleNewClick}>
+        <Plus className="mr-1.5 h-4 w-4" />
+        Novo Cofre
+      </Button>
+
+      <AlertDialog open={paywallOpen} onOpenChange={setPaywallOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Limite do plano gratuito atingido</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você já utilizou o seu cofre gratuito. Assine o Plano Pro para criar
+              cofres ilimitados e continuar recebendo pagamentos com segurança.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {/* TODO Fase 8: redirecionar para checkout Asaas */}
+            <AlertDialogAction>Entendi</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (mutation.isPending) return;
+          setOpen(o);
+          if (!o) resetAll();
+        }}
+      >
+        <DialogContent className="bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo cofre</DialogTitle>
+            <DialogDescription>
+              Crie um cofre para guardar a entrega e o pagamento de um projeto.
+            </DialogDescription>
+          </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
