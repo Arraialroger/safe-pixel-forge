@@ -29,8 +29,15 @@ export function useOwnerBranding() {
     },
   });
 
+  // Cache-bust derivado do dataUpdatedAt: muda só quando a query refaz fetch
+  // (ex.: após mutation invalidar). Permite o <img> recarregar sem poluir o banco.
+  const rawUrl = query.data?.logoUrl ?? null;
+  const logoUrl = rawUrl
+    ? `${rawUrl}${rawUrl.includes("?") ? "&" : "?"}v=${query.dataUpdatedAt}`
+    : null;
+
   return {
-    logoUrl: query.data?.logoUrl ?? null,
+    logoUrl,
     displayName: query.data?.displayName ?? null,
     isLoading: query.isLoading,
   };
