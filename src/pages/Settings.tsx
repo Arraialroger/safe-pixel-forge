@@ -699,6 +699,11 @@ function PlanCard() {
           )}
         </div>
       </div>
+      {!isActive && !cpfQuery.isLoading && !hasCpfCnpj ? (
+        <p className="mt-3 text-[11px] text-amber-500">
+          Preencha seu CPF/CNPJ no card de Perfil acima para liberar a assinatura.
+        </p>
+      ) : null}
       {status && status !== "active" && status !== "overdue" && status !== "inactive" ? (
         <p className="mt-3 text-[11px] text-muted-foreground">
           Status atual: <code className="font-mono">{status}</code>
