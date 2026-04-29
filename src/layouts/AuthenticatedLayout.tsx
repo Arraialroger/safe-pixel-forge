@@ -1,12 +1,12 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthReady } from "@/hooks/useAuthReady";
 
 export default function AuthenticatedLayout() {
-  const { user, loading } = useAuth();
+  const { user, isReady } = useAuthReady();
 
-  if (loading) {
+  if (!isReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

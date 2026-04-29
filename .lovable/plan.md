@@ -1,71 +1,77 @@
-# Fase 4 — Geração de Pagamento no Mercado Pago
+## Diagnóstico do bug
 
-Objetivo: ao clicar em "Pagar e Liberar Arquivo" na tela pública, criar uma preferência de pagamento no Mercado Pago via Edge Function e redirecionar o cliente para o `init_point`.
+Os dados são salvos corretamente no banco (confirmado pelo print da tabela `profiles`), mas somem da UI após o refresh. Há **duas causas** combinadas:
 
-## 1. Edge Function `create-payment`
+### Causa 1 — Race condition de autenticação (causa principal)
+Em `useAuth.ts`, `supabase.auth.getSession()` é assíncrono. Os componentes que disparam `useQuery` montam imediatamente, e como o guard usa apenas `enabled: !!user?.id`, o React Query pode disparar a query no instante exato em que o cliente Supabase ainda **não anexou o JWT**. Resultado: `auth.uid()` retorna `null` no servidor, a RLS de `profiles` (`id = auth.uid()`) bloqueia, e `.maybeSingle()` devolve `null` **sem erro**. A UI então renderiza "vazio" como se o registro não existisse.
 
-Arquivo: `supabase/functions/create-payment/index.ts`
+A workspace às vezes "aparece" porque sua query roda um tick depois (já com o token), mas o profile sempre perde a corrida porque é consumido pela Sidebar logo no primeiro render.
 
-Configuração: pública (sem JWT) — é chamada por visitantes anônimos da página `/pay/:slug`. Validação por dados do cofre, não por auth.
+### Causa 2 — Colisão de cache key entre Sidebar e Settings
+- `useOwnerBranding` (Sidebar): `queryKey: ["profile", userId]` selecionando `custom_logo_url, full_name`.
+- `Settings.ProfileCard`: `queryKey: ["profile", userId]` selecionando `full_name, email, custom_logo_url`.
 
-Fluxo:
-1. CORS + handler `OPTIONS`.
-2. Valida o body com Zod: `{ vault_id: string (uuid) }`.
-3. Cria client Supabase com `SUPABASE_SERVICE_ROLE_KEY` (precisa ler `workspaces.mp_access_token`, que tem RLS restrita ao dono).
-4. Busca o cofre: `id, owner_id, title, price, status, public_slug`.
-   - 404 se não existir.
-   - 409 se `status === 'paid'` (já liberado).
-5. Busca `mp_access_token` em `workspaces` por `owner_id`.
-   - 400 com mensagem clara se ausente: "Vendedor ainda não conectou o Mercado Pago."
-6. `POST https://api.mercadopago.com/checkout/preferences` com header `Authorization: Bearer <mp_access_token>` e body:
-   ```json
-   {
-     "items": [{
-       "title": vault.title,
-       "quantity": 1,
-       "currency_id": "BRL",
-       "unit_price": Number(vault.price)
-     }],
-     "external_reference": vault.id,
-     "back_urls": {
-       "success": `${origin}/pay/${vault.public_slug}?status=success`,
-       "failure": `${origin}/pay/${vault.public_slug}?status=failure`,
-       "pending": `${origin}/pay/${vault.public_slug}?status=pending`
-     },
-     "auto_return": "approved"
-   }
-   ```
-   `origin` = `req.headers.get('origin')` com fallback seguro.
-7. Se MP responder erro, loga e retorna 502 com mensagem genérica.
-8. Sucesso: retorna `{ init_point, preference_id }`.
+Compartilham a mesma chave mas retornam **shapes diferentes**. Quem montar primeiro popula o cache; o segundo recebe um objeto sem o campo que precisa (ex.: `email` undefined no formulário de Configurações).
 
-Sem webhook nesta fase (Fase 5).
+### Causa 3 (menor) — Cache-buster persistido
+O `?v=${Date.now()}` está sendo gravado dentro de `custom_logo_url` no banco. Isso polui o valor canônico, complica deduplicação e faz com que o cache-buster nunca mude após salvo (perdendo o propósito). Deve ser aplicado **na renderização**, não na persistência.
 
-## 2. Frontend — `src/pages/PayVault.tsx`
+---
 
-- Selecionar também `id` no query da `vaults` (hoje só pega title/client_name/price/status/public_slug).
-- Adicionar `useMutation` que chama `supabase.functions.invoke("create-payment", { body: { vault_id: vault.id } })`.
-- Botão "Pagar e Liberar Arquivo":
-  - `disabled` quando `isPaid || mutation.isPending`.
-  - Mostra `<Loader2 className="animate-spin" />` + "Redirecionando..." durante `isPending`.
-  - `onSuccess`: `window.location.href = data.init_point`.
-  - `onError`: toast destrutivo "Não foi possível iniciar o pagamento. Tente novamente em instantes."
-- Remover o toast atual de "Em breve".
+## Plano de correção
 
-## 3. Pré-requisitos / observações ao usuário
+### 1. Hook `useAuthReady` (novo)
+Criar `src/hooks/useAuthReady.ts` seguindo o padrão recomendado: combina `getSession()` + `onAuthStateChange()` e expõe `{ user, session, isReady }`. `isReady = true` somente após o `getSession()` inicial resolver, garantindo que o JWT já está no cliente Supabase antes de qualquer fetch.
 
-- A função usa `SUPABASE_SERVICE_ROLE_KEY` (já existe nos secrets — nada a configurar).
-- O dono do cofre precisa ter um registro em `workspaces` com `mp_access_token` preenchido. Ainda não há UI para isso (Settings é mock). Para testar agora, o token pode ser inserido manualmente via SQL. Em fase futura adicionaremos a tela de conexão.
-- Webhook de confirmação fica para a Fase 5 — após pagar, o `status` do cofre não muda automaticamente ainda.
+`useAuth` continua existindo para `signIn/signUp/signOut`, mas todos os `useQuery` que dependem de RLS passam a usar `useAuthReady` e `enabled: isReady && !!user?.id`.
 
-## Detalhes técnicos
+### 2. Separar query keys e adicionar `enabled: isReady`
+- `useOwnerBranding` → `queryKey: ["owner-branding", userId]`, `enabled: isReady && !!userId`.
+- `Settings.ProfileCard` → `queryKey: ["profile-settings", userId]`, `enabled: isReady && !!userId`.
+- `Settings.MercadoPagoCard` → `enabled: isReady && !!userId`.
+- Mutations invalidam **ambas** as keys (`owner-branding` e `profile-settings`) para manter Sidebar e Form sincronizados.
 
-- Stack: Deno edge function + `npm:zod`.
-- CORS: usar `corsHeaders` de `@supabase/supabase-js/cors` em todas as respostas (incluindo erros).
-- Tipo do retorno tipado no client via cast simples: `const { data, error } = await supabase.functions.invoke<{ init_point: string }>(...)`.
-- Não armazenar nenhum dado novo no DB nesta fase.
+### 3. Remover cache-buster do banco
+- Storage upload continua igual (`upsert: true`).
+- `custom_logo_url` armazena apenas a URL pública limpa (`pub.publicUrl`).
+- O `?v=timestamp` é aplicado **na hora de renderizar** (Sidebar, preview no Settings, Logo público no checkout), usando o `created_at`/`updated_at` do profile **ou** simplesmente um timestamp armazenado em memória após mutation. Solução simples: derivar o cache-buster a partir do hash da URL ou usar o próprio `Date.now()` apenas em retorno otimista da mutation, sem persistir.
+
+### 4. Guard global no `AuthenticatedLayout`
+`AuthenticatedLayout` passa a usar `useAuthReady` e bloqueia o render dos filhos enquanto `!isReady`. Isso garante que Sidebar, Settings e qualquer página filha só montem com o token já anexado — eliminando a race em qualquer rota futura.
+
+### 5. Máscara e validação do WhatsApp em `NewVaultDialog`
+- Adicionar utilitário `formatBRPhone(value)` em `src/lib/phone.ts` que aceita dígitos e formata progressivamente para `(XX) XXXXX-XXXX` ou `(XX) XXXX-XXXX`.
+- No campo `client_whatsapp`:
+  - `onChange` aplica a máscara.
+  - `inputMode="tel"` + `maxLength={16}`.
+  - Validação Zod: opcional, mas se preenchido exige 10 ou 11 dígitos numéricos. Mensagem clara em português.
+- Persistir no banco apenas dígitos (`+55` opcional + DDD + número), normalizados — manter compatível com `wa.me` no template de e-mail.
+- Feedback visual: borda/texto de erro via `FormMessage` já existente; mostrar contador discreto de dígitos quando inválido.
+
+---
 
 ## Arquivos afetados
 
-- novo: `supabase/functions/create-payment/index.ts`
-- editado: `src/pages/PayVault.tsx`
+**Criar**
+- `src/hooks/useAuthReady.ts`
+- `src/lib/phone.ts`
+
+**Editar**
+- `src/hooks/useBranding.ts` — nova query key, usar `useAuthReady`.
+- `src/pages/Settings.tsx` — nova query key, `useAuthReady`, parar de persistir `?v=`, invalidar ambas as keys.
+- `src/layouts/AuthenticatedLayout.tsx` — usar `useAuthReady`.
+- `src/components/AppSidebar.tsx` — usar `useAuthReady` (em vez de `useAuth`) onde fizer sentido.
+- `src/components/NewVaultDialog.tsx` — máscara + validação do WhatsApp.
+- `src/components/Logo.tsx` (opcional) — aceitar `cacheBust?: string | number` e concatenar `?v=` no src ao renderizar.
+- `docs/TECH_SPEC.md` — registrar o padrão `useAuthReady` e a regra "nunca persistir cache-buster".
+
+Sem alterações de banco, RLS, Edge Functions ou Storage policies.
+
+---
+
+## Critérios de aceite
+
+1. Após refresh em `/configuracoes`, logo, nome, email e token aparecem corretamente, sem flicker de "vazio".
+2. Sidebar mostra logo customizada e nome imediatamente após salvar e após refresh.
+3. `custom_logo_url` no banco fica limpo, sem `?v=` acumulado.
+4. Campo WhatsApp em "Novo Cofre" formata enquanto digita e valida 10/11 dígitos.

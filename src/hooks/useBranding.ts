@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthReady } from "@/hooks/useAuthReady";
 
 interface Branding {
   logoUrl: string | null;
@@ -9,11 +9,11 @@ interface Branding {
 
 /** Branding do owner autenticado (usado na Sidebar). */
 export function useOwnerBranding() {
-  const { user } = useAuth();
+  const { user, isReady } = useAuthReady();
 
   const query = useQuery({
-    queryKey: ["profile", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["owner-branding", user?.id],
+    enabled: isReady && !!user?.id,
     staleTime: 60_000,
     queryFn: async (): Promise<Branding> => {
       const { data, error } = await supabase
