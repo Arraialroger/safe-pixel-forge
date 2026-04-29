@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthReady } from "@/hooks/useAuthReady";
 import { supabase } from "@/integrations/supabase/client";
 
 // ----- Schemas -----
@@ -44,11 +44,17 @@ type TokenForm = z.infer<typeof tokenSchema>;
 const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2MB
 
-export default function Settings() {
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
+/** Concatena ?v= sem persistir no banco (apenas para invalidar cache do <img>). */
+function withCacheBust(url: string | null | undefined, version: number | string): string | null {
+  if (!url) return null;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}v=${version}`;
+}
 
-  if (!userId) {
+export default function Settings() {
+  const { user, isReady } = useAuthReady();
+
+  if (!isReady || !user?.id) {
     return (
       <div className="space-y-2">
         <Skeleton className="h-6 w-48" />
@@ -69,8 +75,8 @@ export default function Settings() {
       </header>
 
       <div className="space-y-4">
-        <ProfileCard userId={userId} />
-        <MercadoPagoCard userId={userId} />
+        <ProfileCard userId={user.id} />
+        <MercadoPagoCard userId={user.id} />
         <PlanCard />
       </div>
     </div>
@@ -86,9 +92,12 @@ function ProfileCard({ userId }: { userId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Versão local para cache-bust após salvar (não persistida).
+  const [logoVersion, setLogoVersion] = useState<number>(0);
 
   const profileQuery = useQuery({
-    queryKey: ["profile", userId],
+    queryKey: ["profile-settings", userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -137,7 +146,8 @@ function ProfileCard({ userId }: { userId: string }) {
         if (upErr) throw upErr;
 
         const { data: pub } = supabase.storage.from("logos").getPublicUrl(path);
-        nextLogoUrl = `${pub.publicUrl}?v=${Date.now()}`;
+        // Persistimos a URL limpa; cache-bust é aplicado só na renderização.
+        nextLogoUrl = pub.publicUrl;
       }
 
       const update: Record<string, unknown> = { full_name: values.full_name };
@@ -153,8 +163,10 @@ function ProfileCard({ userId }: { userId: string }) {
       toast({ title: "Perfil atualizado", description: "Suas informações foram salvas." });
       setPendingFile(null);
       setPreviewUrl(null);
+      setLogoVersion(Date.now());
       if (fileInputRef.current) fileInputRef.current.value = "";
-      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      queryClient.invalidateQueries({ queryKey: ["profile-settings", userId] });
+      queryClient.invalidateQueries({ queryKey: ["owner-branding", userId] });
       queryClient.invalidateQueries({ queryKey: ["public-owner-branding", userId] });
     },
     onError: (err: unknown) => {
@@ -177,7 +189,8 @@ function ProfileCard({ userId }: { userId: string }) {
     },
     onSuccess: () => {
       toast({ title: "Logo removida" });
-      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      queryClient.invalidateQueries({ queryKey: ["profile-settings", userId] });
+      queryClient.invalidateQueries({ queryKey: ["owner-branding", userId] });
       queryClient.invalidateQueries({ queryKey: ["public-owner-branding", userId] });
     },
     onError: (err: unknown) => {
@@ -217,7 +230,9 @@ function ProfileCard({ userId }: { userId: string }) {
   }
 
   const isLoading = profileQuery.isLoading;
-  const currentLogo = previewUrl ?? profileQuery.data?.custom_logo_url ?? null;
+  const savedLogo = profileQuery.data?.custom_logo_url ?? null;
+  const currentLogo =
+    previewUrl ?? withCacheBust(savedLogo, logoVersion || (savedLogo ? "saved" : ""));
   const email = profileQuery.data?.email ?? "";
 
   return (
@@ -273,7 +288,7 @@ function ProfileCard({ userId }: { userId: string }) {
                     <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
                     {currentLogo ? "Trocar logo" : "Enviar logo"}
                   </Button>
-                  {profileQuery.data?.custom_logo_url && !pendingFile && (
+                  {savedLogo && !pendingFile && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -343,6 +358,7 @@ function MercadoPagoCard({ userId }: { userId: string }) {
 
   const workspaceQuery = useQuery({
     queryKey: ["workspace", userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workspaces")
