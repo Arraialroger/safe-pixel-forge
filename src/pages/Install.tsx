@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Share, Plus, MoreVertical, Smartphone, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import { Share, Plus, MoreVertical, Smartphone, ArrowLeft, CheckCircle2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/Logo";
+import { toast } from "@/hooks/use-toast";
 
 interface Step {
   text: string;
