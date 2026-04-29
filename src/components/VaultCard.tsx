@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -54,7 +55,9 @@ export function VaultCard({ vault }: VaultCardProps) {
 
   function handleWhatsApp() {
     const link = `${window.location.origin}/pay/${vault.public_slug}`;
-    const text = `Olá! Preparei o arquivo do seu projeto. Acesse o link seguro para realizar o pagamento e liberar o download: ${link}`;
+    const text = isPaid
+      ? `Pagamento confirmado! Seu arquivo já está disponível para download. Acesse pelo link: ${link}`
+      : `Olá! Preparei o arquivo do seu projeto. Acesse o link seguro para realizar o pagamento e liberar o download: ${link}`;
     const encoded = encodeURIComponent(text);
     const digits = vault.client_whatsapp?.replace(/\D/g, "") ?? "";
     const url = digits
@@ -62,6 +65,44 @@ export function VaultCard({ vault }: VaultCardProps) {
       : `https://wa.me/?text=${encoded}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
+
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("resend-vault-email", {
+        body: { vault_id: vault.id },
+      });
+      if (error) {
+        // Tenta extrair a mensagem do corpo retornado pela edge function.
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof ctx.json === "function") {
+          try {
+            const body = await ctx.json();
+            if (body?.error) throw new Error(body.error);
+          } catch (_) {
+            // fallthrough
+          }
+        }
+        throw new Error(error.message || "Falha ao reenviar e-mail");
+      }
+      return data as { success: boolean; kind: "pending" | "paid" };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "E-mail enviado",
+        description:
+          data?.kind === "paid"
+            ? "O cliente recebeu o link de download."
+            : "O cliente recebeu o link de pagamento.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Erro ao reenviar e-mail",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -127,7 +168,22 @@ export function VaultCard({ vault }: VaultCardProps) {
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (!resendMutation.isPending) resendMutation.mutate();
+                }}
+                disabled={resendMutation.isPending}
+              >
+                {resendMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
+                Reenviar e-mail
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={(e) => {
                   e.preventDefault();
