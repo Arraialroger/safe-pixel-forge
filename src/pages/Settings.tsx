@@ -30,6 +30,15 @@ const profileSchema = z.object({
     .trim()
     .min(1, "Informe um nome")
     .max(100, "Máximo de 100 caracteres"),
+  cpf_cnpj: z
+    .string()
+    .trim()
+    .min(1, "Informe seu CPF ou CNPJ")
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine(
+      (v) => v.length === 11 || v.length === 14,
+      "Documento inválido. Use 11 dígitos (CPF) ou 14 dígitos (CNPJ).",
+    ),
 });
 type ProfileForm = z.infer<typeof profileSchema>;
 
