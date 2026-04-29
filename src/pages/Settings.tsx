@@ -163,7 +163,10 @@ function ProfileCard({ userId }: { userId: string }) {
         nextLogoUrl = pub.publicUrl;
       }
 
-      const update: Record<string, unknown> = { full_name: values.full_name };
+      const update: Record<string, unknown> = {
+        full_name: values.full_name,
+        cpf_cnpj: values.cpf_cnpj,
+      };
       if (nextLogoUrl !== undefined) update.custom_logo_url = nextLogoUrl;
 
       const { error } = await supabase
@@ -179,6 +182,7 @@ function ProfileCard({ userId }: { userId: string }) {
       setLogoVersion(Date.now());
       if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["profile-settings", userId] });
+      queryClient.invalidateQueries({ queryKey: ["profile-cpf", userId] });
       queryClient.invalidateQueries({ queryKey: ["owner-branding", userId] });
       queryClient.invalidateQueries({ queryKey: ["public-owner-branding", userId] });
     },
