@@ -53,7 +53,7 @@ export function StatsCards({ vaults }: StatsCardsProps) {
       {items.map((item) => {
         const Icon = item.icon;
         return (
-          <Card key={item.label} className="p-5">
+          <Card key={item.label} className="rounded-2xl p-5 shadow-soft">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">{item.label}</p>

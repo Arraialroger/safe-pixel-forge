@@ -21,13 +21,20 @@ function getInitials(name: string | null, email: string): string {
   return email ? email.slice(0, 2).toUpperCase() : "··";
 }
 
-export function AppSidebar() {
+interface SidebarBodyProps {
+  /** Opcional: chamado ao clicar em um item de navegação (usado para fechar Sheet no mobile). */
+  onNavigate?: () => void;
+}
+
+/** Conteúdo interno da sidebar, reutilizado pela aside fixa (desktop) e pelo Sheet (mobile). */
+export function SidebarBody({ onNavigate }: SidebarBodyProps) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { logoUrl, displayName } = useOwnerBranding();
 
   async function handleLogout() {
     await signOut();
+    onNavigate?.();
     navigate("/login");
   }
 
@@ -37,7 +44,7 @@ export function AppSidebar() {
   const initials = getInitials(displayName, email);
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-card">
+    <div className="flex h-full flex-col">
       <div className="flex h-14 items-center px-4">
         <Logo customLogoUrl={logoUrl} customLogoAlt={displayName ?? undefined} />
       </div>
@@ -50,6 +57,7 @@ export function AppSidebar() {
               key={item.to}
               to={item.to}
               end
+              onClick={() => onNavigate?.()}
               className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               activeClassName="bg-accent text-foreground"
             >
@@ -78,6 +86,15 @@ export function AppSidebar() {
           <span>Sair</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Sidebar fixa (desktop ≥ md). No mobile, o conteúdo é montado dentro do Sheet pelo AuthenticatedLayout. */
+export function AppSidebar() {
+  return (
+    <aside className="hidden h-screen w-60 shrink-0 border-r border-border bg-card md:flex md:flex-col">
+      <SidebarBody />
     </aside>
   );
 }

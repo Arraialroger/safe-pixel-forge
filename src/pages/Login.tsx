@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Loader2, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,7 +66,7 @@ export default function Login() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3">
           <Logo size="lg" />
@@ -78,7 +78,7 @@ export default function Login() {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="rounded-lg border border-border bg-card p-6 shadow-none"
+          className="rounded-2xl border border-border bg-card p-6 shadow-soft-lg"
         >
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -122,6 +122,17 @@ export default function Login() {
               {mode === "signin" ? "Entrar" : "Criar conta"}
             </Button>
 
+            {mode === "signin" && (
+              <div className="text-center">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Esqueci minha senha
+                </Link>
+              </div>
+            )}
+
             <div className="pt-1 text-center">
               <button
                 type="button"
@@ -138,6 +149,15 @@ export default function Login() {
             </div>
           </div>
         </form>
+
+        <div className="mt-4">
+          <Button asChild variant="outline" className="w-full">
+            <Link to="/install">
+              <Smartphone className="mr-2 h-4 w-4" />
+              Instalar no celular
+            </Link>
+          </Button>
+        </div>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
           Protegendo entregas freelancer com cofres digitais.

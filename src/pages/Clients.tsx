@@ -97,7 +97,7 @@ export default function Clients() {
       )}
 
       {!isLoading && !isError && clients.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card/40 px-6 py-12 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card/40 px-6 py-12 text-center shadow-soft">
           <Users className="h-8 w-8 text-muted-foreground" />
           <p className="max-w-sm text-sm text-muted-foreground">
             Sua base de clientes aparecerá aqui assim que você criar os seus
@@ -110,54 +110,96 @@ export default function Clients() {
       )}
 
       {!isLoading && clients.length > 0 && (
-        <section className="rounded-lg border border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>WhatsApp</TableHead>
-                <TableHead className="text-right">Projetos</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clients.map((c) => {
-                const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
-                return (
-                  <TableRow key={c.email}>
-                    <TableCell className="font-medium text-foreground">
-                      {c.clientName || "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{c.email}</TableCell>
-                    <TableCell>
-                      {digits ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-foreground">
-                            {formatBRPhone(c.clientWhatsapp ?? "")}
-                          </span>
-                          <a
-                            href={`https://wa.me/55${digits}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            aria-label={`Abrir WhatsApp de ${c.clientName}`}
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                          </a>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-foreground">
-                      {c.totalProjects}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </section>
+        <>
+          {/* Mobile: lista em cards */}
+          <section className="space-y-3 md:hidden">
+            {clients.map((c) => {
+              const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
+              return (
+                <article
+                  key={c.email}
+                  className="rounded-2xl border border-border bg-card p-4 shadow-soft"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {c.clientName || "—"}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{c.email}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium tabular-nums text-primary">
+                      {c.totalProjects} {c.totalProjects === 1 ? "projeto" : "projetos"}
+                    </span>
+                  </div>
+                  {digits ? (
+                    <a
+                      href={`https://wa.me/55${digits}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs text-success hover:underline"
+                      aria-label={`Abrir WhatsApp de ${c.clientName}`}
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      {formatBRPhone(c.clientWhatsapp ?? "")}
+                    </a>
+                  ) : (
+                    <p className="mt-3 text-xs text-muted-foreground">Sem WhatsApp</p>
+                  )}
+                </article>
+              );
+            })}
+          </section>
+
+          {/* Desktop: tabela */}
+          <section className="hidden rounded-2xl border border-border bg-card shadow-soft md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>E-mail</TableHead>
+                  <TableHead>WhatsApp</TableHead>
+                  <TableHead className="text-right">Projetos</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {clients.map((c) => {
+                  const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
+                  return (
+                    <TableRow key={c.email}>
+                      <TableCell className="font-medium text-foreground">
+                        {c.clientName || "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{c.email}</TableCell>
+                      <TableCell>
+                        {digits ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-foreground">
+                              {formatBRPhone(c.clientWhatsapp ?? "")}
+                            </span>
+                            <a
+                              href={`https://wa.me/55${digits}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                              aria-label={`Abrir WhatsApp de ${c.clientName}`}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-foreground">
+                        {c.totalProjects}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </section>
+        </>
       )}
     </div>
   );

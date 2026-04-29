@@ -265,3 +265,58 @@ Idempotente:
 - **Fase 7.6 — Hardening de isolamento na tabela `vaults`**: substituir a política `Public can read vaults` (`USING (true)`) por uma VIEW `vaults_public` com `security_invoker=on` expondo apenas as colunas necessárias ao checkout (`id`, `public_slug`, `title`, `price`, `client_name`, `status`, `custom_logo_url` do owner) e bloquear o `SELECT` direto da tabela base para `anon`. Isso elimina a dependência exclusiva do filtro client-side `.eq("owner_id", ...)` (hoje aplicado em Dashboard, Clients e Catraca PLG como defesa em profundidade) e impede qualquer vazamento futuro caso uma nova tela esqueça o filtro.
 - Revogar `asaas_subscription_id` no Asaas (`DELETE /subscriptions/{id}`) caso o usuário cancele dentro do app — hoje o cancelamento é feito apenas pelo portal do cliente Asaas.
 
+
+## Fase 9 — Identidade Visual (Ciano), Soft UI, Mobile-First e Recovery
+
+### Nova paleta primária
+- `--primary: 187 100% 43%` (Ciano ≈ `#00CEDB`).
+- `--primary-foreground: 0 0% 7%` (texto escuro sobre ciano para contraste WCAG AA em botões e badges).
+- `--ring: 187 100% 43%` (anéis de foco acompanham a primária).
+- Tokens `--sidebar-primary` e `--sidebar-ring` espelham a primária.
+- `--vault` (âmbar `#F59E0B`) permanece como cor secundária da marca (ícones de cofre).
+
+### Soft UI
+- `--radius: 0.875rem` (≈14px). Todos os componentes shadcn que herdam `var(--radius)` ficam com `rounded-xl`/`rounded-2xl` automaticamente (Card, Input, Button, Dialog, Select, etc.).
+- Utilitários globais em `src/index.css`:
+  - `.shadow-soft` — sombra leve para cards padrão.
+  - `.shadow-soft-lg` — sombra mais difusa para cards-destaque (Login, Reset, PayVault).
+  - `.shadow-soft-primary` — glow ciano sutil (reservada para uso futuro em CTAs de destaque).
+- Cards do Dashboard, Clients, Settings, PayVault, EmptyVaults, VaultCard e StatsCards passaram a usar `rounded-2xl` + `shadow-soft`.
+
+### Mobile-First
+- `AppSidebar` (`src/components/AppSidebar.tsx`) foi dividido em:
+  - `SidebarBody` — conteúdo reutilizável da sidebar (logo, nav, footer com avatar e logout).
+  - `AppSidebar` — `<aside>` fixa com `hidden md:flex`, exibida apenas no desktop.
+- `AuthenticatedLayout` (`src/layouts/AuthenticatedLayout.tsx`):
+  - Em `<md`: header com botão hambúrguer abrindo `Sheet` (lado esquerdo) que monta o `SidebarBody`. Logo da marca centralizado no header mobile.
+  - Em `≥md`: comportamento atual (sidebar fixa).
+  - Padding responsivo: `px-4 py-6 md:px-8 md:py-8`.
+- **Clients** (`src/pages/Clients.tsx`): no mobile (`<md`) lista de cards Soft UI com nome, e-mail, badge de projetos e CTA WhatsApp. No desktop mantém a `<Table>` original.
+- **Dashboard**: header empilha em mobile (`flex-col gap-3 sm:flex-row`); botão "Novo Cofre" full-width em telas pequenas.
+- **NewVaultDialog**: grids `grid-cols-2 → grid-cols-1 sm:grid-cols-2`; `DialogContent` com `max-h-[90vh] overflow-y-auto`.
+- **Settings**: padding `p-5 sm:p-6`; `PlanCard` com layout em coluna no mobile e botões full-width.
+- **PayVault**: paddings ajustados para mobile (`px-4 py-8 sm:py-10`).
+
+### Fluxo de recuperação de senha
+- **`/login`**: novo link "Esqueci minha senha" abaixo do botão Entrar (apenas no modo `signin`).
+- **`/forgot-password`** (rota pública, `src/pages/ForgotPassword.tsx`):
+  - Form com 1 campo (email).
+  - `supabase.auth.resetPasswordForEmail(email, { redirectTo: ${origin}/reset-password })`.
+  - Após sucesso mostra estado "Verifique seu email".
+- **`/reset-password`** (rota pública, `src/pages/ResetPassword.tsx`):
+  - O Supabase entrega o token no fragment (`#access_token=...&type=recovery`) e o `onAuthStateChange` (em `useAuth`) cria a sessão automaticamente.
+  - Detecta `type=recovery` no hash e mostra um estado "Link inválido ou expirado" se a sessão de recovery não existir e o usuário não estiver logado.
+  - Form com `password` + confirmação (mín. 6 chars). Em sucesso chama `supabase.auth.updateUser({ password })` e redireciona para `/dashboard`.
+  - Limpa o hash da URL via `history.replaceState` para evitar reentrega do token.
+
+### Página /install (PWA Experience informativa)
+- Rota pública `src/pages/Install.tsx`.
+- Dois cards lado a lado em desktop / empilhados em mobile com instruções passo-a-passo:
+  - **iPhone (Safari)**: Compartilhar → Adicionar à Tela de Início → Adicionar.
+  - **Android (Chrome)**: menu ⋮ → Adicionar à tela inicial / Instalar app → Confirmar.
+- Botão "Instalar no celular" adicionado ao `Login.tsx` apontando para `/install`.
+- **Importante**: ainda não há manifest PWA nem service worker shippado. A página orienta o uso da função nativa de "Adicionar à Tela Inicial" do navegador, que funciona com a configuração atual. Caso queiramos suporte real a offline/install prompt nativo, adicionar `vite-plugin-pwa` em fase futura (decisão consciente para evitar problemas de cache no preview do editor).
+
+### Rotas públicas (atualizadas)
+- `/`, `/login`, `/forgot-password`, `/reset-password`, `/install`, `/pay/:slug`.
+

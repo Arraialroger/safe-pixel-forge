@@ -253,7 +253,7 @@ function ProfileCard({ userId }: { userId: string }) {
   const email = profileQuery.data?.email ?? "";
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-6">
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-foreground">Perfil e marca</h2>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -462,7 +462,7 @@ function MercadoPagoCard({ userId }: { userId: string }) {
   const showInput = !currentToken || editing;
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-6">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
@@ -636,10 +636,10 @@ function PlanCard() {
       : "Crie cofres ilimitados por R$ 39/mês. Pague via Pix, boleto ou cartão — você escolhe na hora do checkout.";
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6">
-      <div className="flex items-start justify-between gap-4">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1">
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-foreground">Plano Pro</h2>
             {badge ? (
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
@@ -657,12 +657,13 @@ function PlanCard() {
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {isActive ? (
             <Button
               variant="secondary"
               size="sm"
               onClick={() => window.open(customerPortalUrl, "_blank", "noopener,noreferrer")}
+              className="w-full sm:w-auto"
             >
               Gerenciar assinatura
             </Button>
@@ -676,7 +677,7 @@ function PlanCard() {
               >
                 Atualizar status
               </Button>
-              <Button size="sm" onClick={handleCheckout} disabled={checkoutLoading}>
+              <Button size="sm" onClick={handleCheckout} disabled={checkoutLoading} className="w-full sm:w-auto">
                 {checkoutLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                 Pagar fatura
               </Button>
@@ -691,7 +692,7 @@ function PlanCard() {
               >
                 Atualizar status
               </Button>
-              <Button size="sm" onClick={handleCheckout} disabled={checkoutLoading || isLoading}>
+              <Button size="sm" onClick={handleCheckout} disabled={checkoutLoading || isLoading} className="w-full sm:w-auto">
                 {checkoutLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                 Assinar Plano Pro
               </Button>

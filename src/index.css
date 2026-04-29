@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* PixelSafe design system — dark forçado, estilo Linear/minimal.
-   Todas as cores em HSL. */
+/* PixelSafe design system — dark forçado, Soft UI ciano (Fase 9). */
 
 @layer base {
   :root,
@@ -18,9 +17,9 @@
     --popover: 0 0% 7%;
     --popover-foreground: 0 0% 98%;
 
-    /* Primário — azul elétrico #3B82F6 */
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    /* Primário — Ciano vibrante #00CEDB */
+    --primary: 187 100% 43%;
+    --primary-foreground: 0 0% 7%;  /* texto escuro p/ contraste no ciano */
 
     --secondary: 0 0% 10%;
     --secondary-foreground: 0 0% 90%;
@@ -37,25 +36,26 @@
     /* Bordas #1F1F1F */
     --border: 0 0% 12%;
     --input: 0 0% 12%;
-    --ring: 217 91% 60%;
+    --ring: 187 100% 43%;
 
-    --radius: 0.5rem;
+    /* Soft UI — raio mais generoso (≈14px) */
+    --radius: 0.875rem;
 
     /* Tokens próprios da marca */
     --vault: 38 92% 50%;            /* âmbar #F59E0B */
     --vault-foreground: 0 0% 7%;
-    --success: 142 71% 45%;         /* verde sóbrio */
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 98%;
 
-    /* Sidebar (alinhada ao tema) */
+    /* Sidebar */
     --sidebar-background: 0 0% 7%;
     --sidebar-foreground: 0 0% 75%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: 187 100% 43%;
+    --sidebar-primary-foreground: 0 0% 7%;
     --sidebar-accent: 0 0% 10%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 12%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 187 100% 43%;
   }
 }
 
@@ -75,5 +75,25 @@
     font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
       Roboto, sans-serif;
     font-feature-settings: "cv11", "ss01", "ss03";
+  }
+}
+
+@layer utilities {
+  /* Soft UI — sombras difusas com leve glow ciano */
+  .shadow-soft {
+    box-shadow:
+      0 1px 2px -1px rgba(0, 0, 0, 0.4),
+      0 4px 16px -6px rgba(0, 0, 0, 0.45);
+  }
+  .shadow-soft-lg {
+    box-shadow:
+      0 2px 4px -2px rgba(0, 0, 0, 0.5),
+      0 12px 32px -10px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.02);
+  }
+  .shadow-soft-primary {
+    box-shadow:
+      0 4px 16px -4px hsl(var(--primary) / 0.25),
+      0 2px 6px -2px hsl(var(--primary) / 0.15);
   }
 }

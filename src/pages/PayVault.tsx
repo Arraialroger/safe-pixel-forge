@@ -52,12 +52,12 @@ export default function PayVault() {
   });
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8 sm:py-10">
       <CheckoutHeader ownerId={data?.owner_id ?? null} />
 
       <div className="w-full max-w-md">
         {isLoading && (
-          <div className="rounded-lg border border-border bg-card p-8">
+          <div className="rounded-2xl border border-border bg-card p-8 shadow-soft-lg">
             <Skeleton className="mx-auto mb-6 h-14 w-14 rounded-full" />
             <Skeleton className="mx-auto mb-3 h-4 w-40" />
             <Skeleton className="mx-auto mb-8 h-7 w-56" />
@@ -67,7 +67,7 @@ export default function PayVault() {
         )}
 
         {!isLoading && (isError || !data) && (
-          <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft-lg">
             <h1 className="text-base font-semibold text-foreground">
               Cofre não encontrado
             </h1>
@@ -124,7 +124,7 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
   const isLoading = payMutation.isPending;
 
   return (
-    <article className="rounded-lg border border-border bg-card p-8 shadow-none">
+    <article className="rounded-2xl border border-border bg-card p-8 shadow-soft-lg">
       <div className="mb-6 flex flex-col items-center text-center">
         <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-background">
           <Lock className="h-6 w-6 text-vault" strokeWidth={2.25} />
@@ -209,7 +209,7 @@ function SuccessCard({ vault }: { vault: PublicVault }) {
   const isLoading = downloadMutation.isPending;
 
   return (
-    <article className="rounded-lg border border-success/40 bg-success/5 p-8 shadow-none">
+    <article className="rounded-2xl border border-success/40 bg-success/5 p-8 shadow-soft-lg">
       <div className="mb-6 flex flex-col items-center text-center">
         <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-success/40 bg-success/10">
           <CheckCircle2 className="h-7 w-7 text-success" strokeWidth={2.25} />
@@ -258,7 +258,7 @@ function SuccessCard({ vault }: { vault: PublicVault }) {
 
 function ProcessingCard({ vault }: { vault: PublicVault }) {
   return (
-    <article className="rounded-lg border border-vault/40 bg-vault/5 p-8 shadow-none">
+    <article className="rounded-2xl border border-vault/40 bg-vault/5 p-8 shadow-soft-lg">
       <div className="mb-6 flex flex-col items-center text-center">
         <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-vault/40 bg-vault/10">
           <Clock className="h-7 w-7 text-vault" strokeWidth={2.25} />

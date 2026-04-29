@@ -136,7 +136,7 @@ export function VaultCard({ vault }: VaultCardProps) {
   });
 
   return (
-    <article className="group rounded-lg border border-border bg-card p-5 transition-all duration-200 hover:border-muted-foreground/30 hover:bg-accent/30">
+    <article className="group rounded-2xl border border-border bg-card p-5 shadow-soft transition-all duration-200 hover:border-muted-foreground/30 hover:bg-accent/30 hover:shadow-soft-lg">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background">
