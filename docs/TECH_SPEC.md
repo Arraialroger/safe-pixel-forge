@@ -39,9 +39,18 @@ Configurações por dono — guarda credenciais sensíveis do vendedor. Populada
 ### Storage
 - Bucket **`vault-files`** (privado). Layout: `${user_id}/${vault_id}/${nome_seguro}`.
 - Bucket **`logos`** (público). Layout: `${user_id}/logo_imagem.{ext}`.
-  - Policies em `storage.objects`: `INSERT`/`UPDATE`/`DELETE` permitidos apenas quando `bucket_id = 'logos' AND (storage.foldername(name))[1] = auth.uid()::text`.
-  - **Sem policy de SELECT** — leitura é feita exclusivamente via URL pública servida pelo CDN (não permite enumeração/listagem do bucket).
-  - URL salva em `profiles.custom_logo_url` recebe sufixo `?v={timestamp}` para cache-busting após upload.
+  - Policies em `storage.objects`: `INSERT`/`UPDATE`/`DELETE` permitidos apenas quando `bucket_id = 'logos' AND (storage.foldername(name))[1] = auth.uid()::text`. `SELECT` público para o bucket `logos` (necessário para o `upsert: true` checar existência e para servir as logos no checkout).
+  - `profiles.custom_logo_url` armazena **apenas a URL pública limpa**. O cache-busting (`?v=...`) é aplicado **na renderização** (derivado de `query.dataUpdatedAt`) — nunca persistido no banco.
+
+## Padrão de auth-ready (RLS)
+
+Para evitar race condition entre montagem de componentes e restauração da sessão Supabase, todos os `useQuery` que dependem de `auth.uid()` (RLS) usam o hook `useAuthReady` (`src/hooks/useAuthReady.ts`) e definem `enabled: isReady && !!user?.id`. O `AuthenticatedLayout` também aguarda `isReady` antes de renderizar filhos. Sem esse guard, queries podem disparar antes do JWT ser anexado ao cliente, retornando `null` silenciosamente devido à RLS.
+
+Convenção de query keys (evita colisão entre componentes que selecionam shapes diferentes da mesma tabela):
+- `["owner-branding", userId]` — Sidebar (subset: logo + nome).
+- `["profile-settings", userId]` — Tela de Configurações (full_name, email, custom_logo_url).
+- `["workspace", userId]` — workspace do owner.
+- `["public-owner-branding", ownerId]` — checkout público (via Edge Function).
 
 ## Rotas
 
@@ -136,7 +145,7 @@ Endpoint público usado pelo checkout (`/pay/:slug`) para renderizar a logo cust
 
 Tela 100% baseada em dados reais (TanStack Query) da conta autenticada.
 
-- **Card "Perfil e marca"**: lê/edita `profiles.full_name` e gerencia upload de logo no bucket `logos` (path `${user.id}/logo_imagem.{ext}`, `upsert: true`). Após upload, salva URL pública com cache-busting (`?v=${Date.now()}`) em `profiles.custom_logo_url`. Suporta remoção da logo.
+- **Card "Perfil e marca"**: lê/edita `profiles.full_name` e gerencia upload de logo no bucket `logos` (path `${user.id}/logo_imagem.{ext}`, `upsert: true`). Persiste a URL pública limpa em `profiles.custom_logo_url`; o cache-busting é aplicado em runtime via `query.dataUpdatedAt`. Suporta remoção da logo.
 - **Card "Integração financeira — Mercado Pago"**: lê/edita `workspaces.mp_access_token`. Quando já existe um token, exibe apenas `APP_USR-••••-{4_últimos}` em fonte monoespaçada com botão "Substituir token". Input sempre `type="password"`.
 - **Card "Plano"**: placeholder visual ("Beta") com texto indicando que a cobrança SaaS chega na V1.0. Botão "Gerenciar plano" desabilitado com tooltip "Em breve".
 
