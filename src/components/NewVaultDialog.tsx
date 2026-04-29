@@ -40,12 +40,14 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
 import { toast } from "@/hooks/use-toast";
 import { VaultStatus } from "@/data/mockVaults";
 import { formatBRLInput, parseBRLToNumber } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatBRPhone, isValidBRPhone, normalizeBRPhone, onlyDigits } from "@/lib/phone";
+import { useNavigate } from "react-router-dom";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const FREE_PLAN_LIMIT = 1;
@@ -98,6 +100,8 @@ function formatBytes(bytes: number) {
 
 export function NewVaultDialog() {
   const { user } = useAuth();
+  const { isActive: subscriptionActive } = useSubscription();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
@@ -140,7 +144,7 @@ export function NewVaultDialog() {
 
   function handleNewClick() {
     const c = countQuery.data ?? 0;
-    if (c >= FREE_PLAN_LIMIT) {
+    if (c >= FREE_PLAN_LIMIT && !subscriptionActive) {
       setPaywallOpen(true);
       return;
     }
@@ -180,7 +184,7 @@ export function NewVaultDialog() {
         .select("id", { count: "exact", head: true })
         .eq("owner_id", user.id);
       if (countErr) throw countErr;
-      if ((currentCount ?? 0) >= FREE_PLAN_LIMIT) {
+      if ((currentCount ?? 0) >= FREE_PLAN_LIMIT && !subscriptionActive) {
         throw new Error(
           "Limite do plano gratuito atingido. Assine o Plano Pro para criar mais cofres.",
         );
@@ -285,13 +289,19 @@ export function NewVaultDialog() {
           <AlertDialogHeader>
             <AlertDialogTitle>Limite do plano gratuito atingido</AlertDialogTitle>
             <AlertDialogDescription>
-              Você já utilizou o seu cofre gratuito. Assine o Plano Pro para criar
-              cofres ilimitados e continuar recebendo pagamentos com segurança.
+              Você já utilizou o seu cofre gratuito. Assine o Plano Pro (R$ 39/mês)
+              para criar cofres ilimitados e continuar recebendo pagamentos com segurança.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            {/* TODO Fase 8: redirecionar para checkout Asaas */}
-            <AlertDialogAction>Entendi</AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                setPaywallOpen(false);
+                navigate("/configuracoes");
+              }}
+            >
+              Assinar agora
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

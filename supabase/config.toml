@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.resend-vault-email]
 verify_jwt = true
+
+[functions.asaas-checkout]
+verify_jwt = true
+
+[functions.asaas-webhook]
+verify_jwt = false
