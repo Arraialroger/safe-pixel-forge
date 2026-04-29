@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           asaas_customer_id: string | null
           asaas_subscription_id: string | null
+          cpf_cnpj: string | null
           created_at: string
           custom_logo_url: string | null
           email: string | null
@@ -28,6 +29,7 @@ export type Database = {
         Insert: {
           asaas_customer_id?: string | null
           asaas_subscription_id?: string | null
+          cpf_cnpj?: string | null
           created_at?: string
           custom_logo_url?: string | null
           email?: string | null
@@ -38,6 +40,7 @@ export type Database = {
         Update: {
           asaas_customer_id?: string | null
           asaas_subscription_id?: string | null
+          cpf_cnpj?: string | null
           created_at?: string
           custom_logo_url?: string | null
           email?: string | null
