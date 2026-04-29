@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { VaultCard } from "@/components/VaultCard";
 import { NewVaultDialog } from "@/components/NewVaultDialog";
+import { StatsCards } from "@/components/StatsCards";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,11 +57,14 @@ export default function Dashboard() {
       )}
 
       {!isLoading && vaults && vaults.length > 0 && (
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {vaults.map((vault) => (
-            <VaultCard key={vault.id} vault={vault} />
-          ))}
-        </section>
+        <>
+          <StatsCards vaults={vaults} />
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {vaults.map((vault) => (
+              <VaultCard key={vault.id} vault={vault} />
+            ))}
+          </section>
+        </>
       )}
     </div>
   );

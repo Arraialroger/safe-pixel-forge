@@ -394,6 +394,22 @@ function MercadoPagoCard({ userId }: { userId: string }) {
     },
     onError: (err: unknown) => {
       console.error(err);
+      const e = err as { code?: string; message?: string };
+      const msg = (e?.message ?? "").toLowerCase();
+      const isUnique =
+        e?.code === "23505" ||
+        msg.includes("mp_access_token") ||
+        msg.includes("duplicate") ||
+        msg.includes("unique");
+      if (isUnique) {
+        toast({
+          title: "Token já vinculado",
+          description:
+            "Este token do Mercado Pago já está vinculado a outra conta no PixelSafe.",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Erro ao salvar token",
         variant: "destructive",
