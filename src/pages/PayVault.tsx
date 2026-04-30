@@ -1,14 +1,15 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { formatBRL, statusLabel, VaultStatus } from "@/data/mockVaults";
+import { isExpiringSoon, expiringLabel } from "@/utils/vault";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { usePublicOwnerBranding } from "@/hooks/useBranding";
+import { CheckoutCardSkeleton } from "@/components/skeletons/CheckoutCardSkeleton";
 
 const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
@@ -62,15 +63,7 @@ export default function PayVault() {
       <CheckoutHeader ownerId={data?.owner_id ?? null} />
 
       <div className="w-full max-w-md">
-        {isLoading && (
-          <div className="rounded-2xl border border-border bg-card p-8 shadow-soft-lg">
-            <Skeleton className="mx-auto mb-6 h-14 w-14 rounded-full" />
-            <Skeleton className="mx-auto mb-3 h-4 w-40" />
-            <Skeleton className="mx-auto mb-8 h-7 w-56" />
-            <Skeleton className="mb-3 h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        )}
+        {isLoading && <CheckoutCardSkeleton />}
 
         {!isLoading && (isError || !data) && (
           <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft-lg">
