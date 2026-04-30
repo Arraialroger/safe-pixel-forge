@@ -157,6 +157,17 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
         </span>
       </div>
 
+      {isExpiringSoon(vault) && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+            <strong className="font-semibold">Atenção:</strong>{" "}
+            {expiringLabel(vault)?.toLowerCase() ?? "este link expira em breve"}.
+            Garanta seu acesso agora.
+          </p>
+        </div>
+      )}
+
       <Button
         className="w-full"
         disabled={isLoading}
