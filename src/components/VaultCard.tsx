@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
+import { Vault, formatBRL, statusLabel, isExpired, formatExpiryDate } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,7 @@ interface VaultCardProps {
 
 export function VaultCard({ vault }: VaultCardProps) {
   const isPaid = vault.status === "paid";
+  const expired = isExpired(vault);
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -151,10 +152,14 @@ export function VaultCard({ vault }: VaultCardProps) {
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[11px] font-medium",
-              isPaid ? "bg-success/15 text-success" : "bg-primary/15 text-primary",
+              expired
+                ? "bg-destructive/15 text-destructive"
+                : isPaid
+                  ? "bg-success/15 text-success"
+                  : "bg-primary/15 text-primary",
             )}
           >
-            {statusLabel(vault.status)}
+            {expired ? "Expirado" : statusLabel(vault.status)}
           </span>
 
           <DropdownMenu>
@@ -172,9 +177,9 @@ export function VaultCard({ vault }: VaultCardProps) {
               <DropdownMenuItem
                 onSelect={(e) => {
                   e.preventDefault();
-                  if (!resendMutation.isPending) resendMutation.mutate();
+                  if (!resendMutation.isPending && !expired) resendMutation.mutate();
                 }}
-                disabled={resendMutation.isPending}
+                disabled={resendMutation.isPending || expired}
               >
                 {resendMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -203,15 +208,29 @@ export function VaultCard({ vault }: VaultCardProps) {
         Cliente · <span className="text-foreground/80">{vault.client_name}</span>
       </p>
 
-      <p className="mb-4 text-xl font-semibold tracking-tight text-foreground">
+      <p className="mb-2 text-xl font-semibold tracking-tight text-foreground">
         {formatBRL(Number(vault.price))}
       </p>
+
+      {vault.expires_at && (
+        <p
+          className={cn(
+            "mb-4 flex items-center gap-1.5 text-[11px]",
+            expired ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          <CalendarClock className="h-3 w-3" />
+          {expired ? "Expirou em " : "Expira em "}
+          {formatExpiryDate(vault.expires_at)}
+        </p>
+      )}
 
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={handleCopy}
+          disabled={expired}
           className="w-full"
         >
           {copied ? (
@@ -226,6 +245,7 @@ export function VaultCard({ vault }: VaultCardProps) {
           variant="outline"
           size="sm"
           onClick={handleWhatsApp}
+          disabled={expired}
           aria-label="Compartilhar via WhatsApp"
           title="Compartilhar via WhatsApp"
           className="px-2.5 text-success hover:text-success"

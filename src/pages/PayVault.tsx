@@ -1,6 +1,6 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,12 @@ interface PublicVault {
   public_slug: string;
   file_name: string | null;
   owner_id: string;
+  expires_at: string | null;
+}
+
+function isVaultExpired(v: Pick<PublicVault, "expires_at">): boolean {
+  if (!v.expires_at) return false;
+  return new Date(v.expires_at).getTime() < Date.now();
 }
 
 export default function PayVault() {
@@ -36,7 +42,7 @@ export default function PayVault() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vaults")
-        .select("id, title, client_name, price, status, public_slug, file_name, owner_id")
+        .select("id, title, client_name, price, status, public_slug, file_name, owner_id, expires_at")
         .eq("public_slug", slug!)
         .maybeSingle();
       if (error) throw error;
@@ -78,11 +84,13 @@ export default function PayVault() {
         )}
 
         {data && (
-          data.status === "paid"
-            ? <SuccessCard vault={data} />
-            : isProcessingFromUrl
-              ? <ProcessingCard vault={data} />
-              : <CheckoutCard vault={data} />
+          isVaultExpired(data)
+            ? <ExpiredCard vault={data} />
+            : data.status === "paid"
+              ? <SuccessCard vault={data} />
+              : isProcessingFromUrl
+                ? <ProcessingCard vault={data} />
+                : <CheckoutCard vault={data} />
         )}
       </div>
 
@@ -173,6 +181,38 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
 
       <p className="mt-4 text-center text-[11px] text-muted-foreground">
         Após confirmar o pagamento, o arquivo é liberado automaticamente.
+      </p>
+
+      <div className="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-center">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <ShieldCheck className="mr-1 inline h-3 w-3 -translate-y-px" />
+          Por motivos de segurança, o arquivo ficará disponível para download por
+          {" "}<strong className="text-foreground/80">7 dias</strong> após a confirmação do pagamento.
+        </p>
+      </div>
+    </article>
+  );
+}
+
+function ExpiredCard({ vault }: { vault: PublicVault }) {
+  return (
+    <article className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft-lg">
+      <div className="mb-6 flex flex-col items-center">
+        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-destructive/30 bg-destructive/10">
+          <AlertTriangle className="h-7 w-7 text-destructive" strokeWidth={2.25} />
+        </div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-destructive">
+          Cofre expirado
+        </p>
+      </div>
+
+      <h1 className="text-lg font-semibold text-foreground">{vault.title}</h1>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Este cofre expirou e o arquivo foi removido dos nossos servidores por
+        segurança.
+      </p>
+      <p className="mt-4 text-[11px] text-muted-foreground/80">
+        Entre em contato com quem enviou este link para obter uma nova entrega.
       </p>
     </article>
   );
