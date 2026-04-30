@@ -84,11 +84,13 @@ export default function PayVault() {
         )}
 
         {data && (
-          data.status === "paid"
-            ? <SuccessCard vault={data} />
-            : isProcessingFromUrl
-              ? <ProcessingCard vault={data} />
-              : <CheckoutCard vault={data} />
+          isVaultExpired(data)
+            ? <ExpiredCard vault={data} />
+            : data.status === "paid"
+              ? <SuccessCard vault={data} />
+              : isProcessingFromUrl
+                ? <ProcessingCard vault={data} />
+                : <CheckoutCard vault={data} />
         )}
       </div>
 
