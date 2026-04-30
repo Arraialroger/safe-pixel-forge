@@ -152,10 +152,14 @@ export function VaultCard({ vault }: VaultCardProps) {
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[11px] font-medium",
-              isPaid ? "bg-success/15 text-success" : "bg-primary/15 text-primary",
+              expired
+                ? "bg-destructive/15 text-destructive"
+                : isPaid
+                  ? "bg-success/15 text-success"
+                  : "bg-primary/15 text-primary",
             )}
           >
-            {statusLabel(vault.status)}
+            {expired ? "Expirado" : statusLabel(vault.status)}
           </span>
 
           <DropdownMenu>
