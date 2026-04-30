@@ -42,7 +42,7 @@ export default function PayVault() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vaults")
-        .select("id, title, client_name, price, status, public_slug, file_name, owner_id")
+        .select("id, title, client_name, price, status, public_slug, file_name, owner_id, expires_at")
         .eq("public_slug", slug!)
         .maybeSingle();
       if (error) throw error;
