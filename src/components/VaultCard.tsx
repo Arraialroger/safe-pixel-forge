@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Vault, formatBRL, statusLabel } from "@/data/mockVaults";
+import { Vault, formatBRL, statusLabel, isExpired, formatExpiryDate } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
