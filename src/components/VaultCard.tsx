@@ -30,6 +30,7 @@ interface VaultCardProps {
 
 export function VaultCard({ vault }: VaultCardProps) {
   const isPaid = vault.status === "paid";
+  const expired = isExpired(vault);
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
