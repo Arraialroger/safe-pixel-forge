@@ -320,3 +320,33 @@ Idempotente:
 ### Rotas públicas (atualizadas)
 - `/`, `/login`, `/forgot-password`, `/reset-password`, `/install`, `/pay/:slug`.
 
+
+## Política de Retenção (Fase 10)
+
+Cofres possuem uma "data de validade" dupla, controlada pela coluna `vaults.expires_at` (timestamptz, nullable), que minimiza custos de Storage do SaaS.
+
+### Regras de negócio
+
+- **Inadimplente (default)**: ao criar um cofre, o Postgres define automaticamente `expires_at = now() + interval '30 days'` via `DEFAULT` na coluna. O frontend não precisa enviar nada.
+- **Pagante**: quando a Edge Function `mp-webhook` confirma o pagamento real (status `approved` na API do Mercado Pago), o `UPDATE` que muda `status` para `paid` também sobrescreve `expires_at` para exatamente **7 dias** a partir daquele momento (`Date.now() + 7d`, em ISO).
+- **Idempotência preservada**: o update continua usando `.neq("status", "paid")` para que reentregas do webhook não resetem a data.
+
+### Comportamento da UI
+
+- **Página pública `/pay/:slug`** (`src/pages/PayVault.tsx`):
+  - O `select` agora inclui `expires_at`.
+  - Helper local `isVaultExpired(vault)` compara `new Date(expires_at) < Date.now()`.
+  - Ordem de renderização: `ExpiredCard` → `SuccessCard` → `ProcessingCard` → `CheckoutCard`. Expirado tem prioridade absoluta (bloqueia tanto pagamento quanto download).
+  - `ExpiredCard`: card Soft UI com ícone `AlertTriangle` em destructive suave, título "Cofre expirado" e mensagem "Este cofre expirou e o arquivo foi removido dos nossos servidores por segurança."
+  - `CheckoutCard`: ganhou um aviso discreto abaixo do CTA: "Por motivos de segurança, o arquivo ficará disponível para download por 7 dias após a confirmação do pagamento."
+- **Dashboard / `VaultCard`** (`src/components/VaultCard.tsx`):
+  - Helper compartilhado `isExpired(vault)` em `src/data/mockVaults.ts`.
+  - Badge muda para "Expirado" em tom destructive quando `isExpired === true` (sobrescreve "Pago"/"Pendente").
+  - Linha sutil com ícone `CalendarClock` exibe "Expira em DD/MM/AAAA" (ou "Expirou em ..." em destructive).
+  - Quando expirado, ficam **desabilitados**: "Copiar link", botão WhatsApp e o item "Reenviar e-mail" do dropdown — não faz sentido distribuir um link inacessível.
+  - Continua **habilitado**: "Excluir cofre" (designer pode limpar manualmente).
+
+### Não-objetivos (decisão consciente)
+
+- **Sem cron jobs / sem deleção física automática**: nem no frontend nem nas Edge Functions atuais. A remoção dos arquivos do bucket `vault-files` será feita manualmente via SQL/Storage API quando necessário.
+- A função `get-download-url` não foi alterada — quando o arquivo for fisicamente removido, `createSignedUrl` falhará naturalmente; e antes disso a UI já bloqueia o acesso.
