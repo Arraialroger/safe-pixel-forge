@@ -180,9 +180,11 @@ Deno.serve(async (req) => {
     }
 
     // Idempotente: só atualiza (e devolve linha) se ainda estava pendente.
+    // Sobrescreve expires_at para 7 dias a partir da confirmação (regra do pagante).
+    const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: updated, error: updErr } = await supabase
       .from("vaults")
-      .update({ status: "paid" })
+      .update({ status: "paid", expires_at: newExpiresAt })
       .eq("id", vaultId)
       .neq("status", "paid")
       .select("title, client_email, public_slug")
