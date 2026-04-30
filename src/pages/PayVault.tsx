@@ -21,6 +21,12 @@ interface PublicVault {
   public_slug: string;
   file_name: string | null;
   owner_id: string;
+  expires_at: string | null;
+}
+
+function isVaultExpired(v: Pick<PublicVault, "expires_at">): boolean {
+  if (!v.expires_at) return false;
+  return new Date(v.expires_at).getTime() < Date.now();
 }
 
 export default function PayVault() {
