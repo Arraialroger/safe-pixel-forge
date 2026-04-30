@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel, isExpired, formatExpiryDate } from "@/data/mockVaults";
+import { isExpiringSoon, expiringLabel } from "@/utils/vault";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,8 @@ interface VaultCardProps {
 export function VaultCard({ vault }: VaultCardProps) {
   const isPaid = vault.status === "paid";
   const expired = isExpired(vault);
+  const expiringSoon = isExpiringSoon(vault) && !isPaid;
+  const urgencyLabel = expiringLabel(vault);
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -156,10 +159,16 @@ export function VaultCard({ vault }: VaultCardProps) {
                 ? "bg-destructive/15 text-destructive"
                 : isPaid
                   ? "bg-success/15 text-success"
-                  : "bg-primary/15 text-primary",
+                  : expiringSoon
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                    : "bg-primary/15 text-primary",
             )}
           >
-            {expired ? "Expirado" : statusLabel(vault.status)}
+            {expired
+              ? "Expirado"
+              : expiringSoon
+                ? urgencyLabel ?? "Expirando"
+                : statusLabel(vault.status)}
           </span>
 
           <DropdownMenu>
@@ -216,7 +225,11 @@ export function VaultCard({ vault }: VaultCardProps) {
         <p
           className={cn(
             "mb-4 flex items-center gap-1.5 text-[11px]",
-            expired ? "text-destructive" : "text-muted-foreground",
+            expired
+              ? "text-destructive"
+              : expiringSoon
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-muted-foreground",
           )}
         >
           <CalendarClock className="h-3 w-3" />
