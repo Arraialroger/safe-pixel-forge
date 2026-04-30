@@ -208,15 +208,29 @@ export function VaultCard({ vault }: VaultCardProps) {
         Cliente · <span className="text-foreground/80">{vault.client_name}</span>
       </p>
 
-      <p className="mb-4 text-xl font-semibold tracking-tight text-foreground">
+      <p className="mb-2 text-xl font-semibold tracking-tight text-foreground">
         {formatBRL(Number(vault.price))}
       </p>
+
+      {vault.expires_at && (
+        <p
+          className={cn(
+            "mb-4 flex items-center gap-1.5 text-[11px]",
+            expired ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          <CalendarClock className="h-3 w-3" />
+          {expired ? "Expirou em " : "Expira em "}
+          {formatExpiryDate(vault.expires_at)}
+        </p>
+      )}
 
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={handleCopy}
+          disabled={expired}
           className="w-full"
         >
           {copied ? (
@@ -231,6 +245,7 @@ export function VaultCard({ vault }: VaultCardProps) {
           variant="outline"
           size="sm"
           onClick={handleWhatsApp}
+          disabled={expired}
           aria-label="Compartilhar via WhatsApp"
           title="Compartilhar via WhatsApp"
           className="px-2.5 text-success hover:text-success"
