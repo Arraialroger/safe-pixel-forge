@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { VaultCard } from "@/components/VaultCard";
 import { NewVaultDialog } from "@/components/NewVaultDialog";
 import { StatsCards } from "@/components/StatsCards";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  VaultCardSkeleton,
+  StatsCardSkeleton,
+} from "@/components/skeletons/VaultCardSkeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { Vault } from "@/data/mockVaults";
@@ -42,11 +45,18 @@ export default function Dashboard() {
       </header>
 
       {isLoading && (
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[140px] w-full rounded-2xl" />
-          ))}
-        </section>
+        <>
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <StatsCardSkeleton key={`stat-${i}`} />
+            ))}
+          </section>
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <VaultCardSkeleton key={`vault-${i}`} />
+            ))}
+          </section>
+        </>
       )}
 
       {isError && (

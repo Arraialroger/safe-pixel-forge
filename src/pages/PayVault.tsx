@@ -1,14 +1,15 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { formatBRL, statusLabel, VaultStatus } from "@/data/mockVaults";
+import { isExpiringSoon, expiringLabel } from "@/utils/vault";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { usePublicOwnerBranding } from "@/hooks/useBranding";
+import { CheckoutCardSkeleton } from "@/components/skeletons/CheckoutCardSkeleton";
 
 const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
@@ -62,15 +63,7 @@ export default function PayVault() {
       <CheckoutHeader ownerId={data?.owner_id ?? null} />
 
       <div className="w-full max-w-md">
-        {isLoading && (
-          <div className="rounded-2xl border border-border bg-card p-8 shadow-soft-lg">
-            <Skeleton className="mx-auto mb-6 h-14 w-14 rounded-full" />
-            <Skeleton className="mx-auto mb-3 h-4 w-40" />
-            <Skeleton className="mx-auto mb-8 h-7 w-56" />
-            <Skeleton className="mb-3 h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        )}
+        {isLoading && <CheckoutCardSkeleton />}
 
         {!isLoading && (isError || !data) && (
           <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft-lg">
@@ -85,7 +78,7 @@ export default function PayVault() {
 
         {data && (
           isVaultExpired(data)
-            ? <ExpiredCard vault={data} />
+            ? <ExpiredCard vault={data} ownerId={data.owner_id} />
             : data.status === "paid"
               ? <SuccessCard vault={data} />
               : isProcessingFromUrl
@@ -164,6 +157,17 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
         </span>
       </div>
 
+      {isExpiringSoon(vault) && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
+            <strong className="font-semibold">Atenção:</strong>{" "}
+            {expiringLabel(vault)?.toLowerCase() ?? "este link expira em breve"}.
+            Garanta seu acesso agora.
+          </p>
+        </div>
+      )}
+
       <Button
         className="w-full"
         disabled={isLoading}
@@ -194,7 +198,19 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
   );
 }
 
-function ExpiredCard({ vault }: { vault: PublicVault }) {
+function ExpiredCard({ vault, ownerId }: { vault: PublicVault; ownerId: string | null }) {
+  const { email: ownerEmail, displayName } = usePublicOwnerBranding(ownerId);
+
+  const mailtoHref = ownerEmail
+    ? `mailto:${ownerEmail}?subject=${encodeURIComponent(
+        `Link expirado - ${vault.title}`,
+      )}&body=${encodeURIComponent(
+        `Olá${displayName ? `, ${displayName}` : ""}!\n\n` +
+          `O link de pagamento do projeto "${vault.title}" expirou e não consigo mais acessar o arquivo.\n` +
+          `Você poderia gerar uma nova entrega para mim?\n\nObrigado!`,
+      )}`
+    : null;
+
   return (
     <article className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft-lg">
       <div className="mb-6 flex flex-col items-center">
@@ -211,8 +227,18 @@ function ExpiredCard({ vault }: { vault: PublicVault }) {
         Este cofre expirou e o arquivo foi removido dos nossos servidores por
         segurança.
       </p>
+
+      {mailtoHref && (
+        <Button asChild variant="outline" className="mt-6 w-full">
+          <a href={mailtoHref}>
+            <Mail className="mr-2 h-4 w-4" />
+            Falar com o profissional
+          </a>
+        </Button>
+      )}
+
       <p className="mt-4 text-[11px] text-muted-foreground/80">
-        Entre em contato com quem enviou este link para obter uma nova entrega.
+        Solicite uma nova entrega para acessar o arquivo novamente.
       </p>
     </article>
   );

@@ -5,6 +5,7 @@ import { useAuthReady } from "@/hooks/useAuthReady";
 interface Branding {
   logoUrl: string | null;
   displayName: string | null;
+  email: string | null;
 }
 
 /** Branding do owner autenticado (usado na Sidebar). */
@@ -18,13 +19,14 @@ export function useOwnerBranding() {
     queryFn: async (): Promise<Branding> => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("custom_logo_url, full_name")
+        .select("custom_logo_url, full_name, email")
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;
       return {
         logoUrl: data?.custom_logo_url ?? null,
         displayName: data?.full_name ?? null,
+        email: data?.email ?? null,
       };
     },
   });
@@ -53,11 +55,13 @@ export function usePublicOwnerBranding(ownerId: string | null | undefined) {
       const { data, error } = await supabase.functions.invoke<{
         custom_logo_url: string | null;
         full_name: string | null;
+        email: string | null;
       }>("get-owner-branding", { body: { owner_id: ownerId } });
       if (error) throw error;
       return {
         logoUrl: data?.custom_logo_url ?? null,
         displayName: data?.full_name ?? null,
+        email: data?.email ?? null,
       };
     },
   });
@@ -65,6 +69,7 @@ export function usePublicOwnerBranding(ownerId: string | null | undefined) {
   return {
     logoUrl: query.data?.logoUrl ?? null,
     displayName: query.data?.displayName ?? null,
+    email: query.data?.email ?? null,
     isLoading: query.isLoading,
   };
 }
