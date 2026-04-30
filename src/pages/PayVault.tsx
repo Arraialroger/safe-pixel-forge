@@ -78,7 +78,7 @@ export default function PayVault() {
 
         {data && (
           isVaultExpired(data)
-            ? <ExpiredCard vault={data} />
+            ? <ExpiredCard vault={data} ownerId={data.owner_id} />
             : data.status === "paid"
               ? <SuccessCard vault={data} />
               : isProcessingFromUrl
@@ -187,7 +187,19 @@ function CheckoutCard({ vault }: { vault: PublicVault }) {
   );
 }
 
-function ExpiredCard({ vault }: { vault: PublicVault }) {
+function ExpiredCard({ vault, ownerId }: { vault: PublicVault; ownerId: string | null }) {
+  const { email: ownerEmail, displayName } = usePublicOwnerBranding(ownerId);
+
+  const mailtoHref = ownerEmail
+    ? `mailto:${ownerEmail}?subject=${encodeURIComponent(
+        `Link expirado - ${vault.title}`,
+      )}&body=${encodeURIComponent(
+        `Olá${displayName ? `, ${displayName}` : ""}!\n\n` +
+          `O link de pagamento do projeto "${vault.title}" expirou e não consigo mais acessar o arquivo.\n` +
+          `Você poderia gerar uma nova entrega para mim?\n\nObrigado!`,
+      )}`
+    : null;
+
   return (
     <article className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft-lg">
       <div className="mb-6 flex flex-col items-center">
@@ -204,8 +216,18 @@ function ExpiredCard({ vault }: { vault: PublicVault }) {
         Este cofre expirou e o arquivo foi removido dos nossos servidores por
         segurança.
       </p>
+
+      {mailtoHref && (
+        <Button asChild variant="outline" className="mt-6 w-full">
+          <a href={mailtoHref}>
+            <Mail className="mr-2 h-4 w-4" />
+            Falar com o profissional
+          </a>
+        </Button>
+      )}
+
       <p className="mt-4 text-[11px] text-muted-foreground/80">
-        Entre em contato com quem enviou este link para obter uma nova entrega.
+        Solicite uma nova entrega para acessar o arquivo novamente.
       </p>
     </article>
   );
