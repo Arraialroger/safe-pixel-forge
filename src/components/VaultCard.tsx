@@ -177,9 +177,9 @@ export function VaultCard({ vault }: VaultCardProps) {
               <DropdownMenuItem
                 onSelect={(e) => {
                   e.preventDefault();
-                  if (!resendMutation.isPending) resendMutation.mutate();
+                  if (!resendMutation.isPending && !expired) resendMutation.mutate();
                 }}
-                disabled={resendMutation.isPending}
+                disabled={resendMutation.isPending || expired}
               >
                 {resendMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
