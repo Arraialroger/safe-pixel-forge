@@ -1,60 +1,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { sendResendEmail, escapeHtml, PUBLIC_APP_URL } from "../_shared/resend.ts";
 
 // Webhook público — Mercado Pago não envia JWT.
 // Sempre responde 200 para evitar reentrega infinita; erros são apenas logados.
-//
-// Regra crítica: o MP dispara o webhook em vários estados (pending, in_process,
-// approved, rejected...). Só liberamos o cofre se a API confirmar
-// status === "approved" E o external_reference bater com o vault_id da URL.
-
-const PUBLIC_APP_URL =
-  Deno.env.get("PUBLIC_APP_URL") ?? "https://safe-pixel-forge.lovable.app";
-const FROM_EMAIL = "PixelSafe <suporte@pixelsafe.com.br>";
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function buildEmailHtml(title: string, link: string): string {
-  const safeTitle = escapeHtml(title);
-  return `<!doctype html>
-<html lang="pt-BR">
-  <body style="margin:0;padding:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:32px 16px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;padding:32px;max-width:480px;">
-            <tr><td>
-              <h1 style="margin:0 0 12px;font-size:20px;color:#0a0a0a;">Pagamento confirmado 🔓</h1>
-              <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#4b5563;">
-                Recebemos seu pagamento e o arquivo <strong>${safeTitle}</strong> já está liberado para download.
-              </p>
-              <p style="margin:0 0 24px;">
-                <a href="${link}" style="display:inline-block;background:#0a0a0a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:600;">
-                  Acessar e baixar arquivo
-                </a>
-              </p>
-              <p style="margin:0;font-size:12px;color:#9ca3af;">
-                Se o botão não funcionar, copie e cole este link no navegador:<br/>
-                <span style="color:#6b7280;">${link}</span>
-              </p>
-            </td></tr>
-          </table>
-          <p style="margin:16px 0 0;font-size:11px;color:#9ca3af;">PixelSafe · Entrega segura de arquivos</p>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
-}
 
 function ok() {
   return new Response("ok", { status: 200 });
+}
+
+function formatBRL(value: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
 }
 
 Deno.serve(async (req) => {
@@ -79,8 +37,6 @@ Deno.serve(async (req) => {
       return ok();
     }
 
-    // O MP envia notificações para diversos tópicos (payment, merchant_order, plan...).
-    // Só nos interessa "payment".
     const type =
       (body.type as string | undefined) ??
       (body.topic as string | undefined) ??
@@ -105,7 +61,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Busca dono do cofre para resolver o access_token correto.
     const { data: vaultRow, error: vaultErr } = await supabase
       .from("vaults")
       .select("id, owner_id, status")
@@ -136,13 +91,10 @@ Deno.serve(async (req) => {
       return ok();
     }
 
-    // Validação real do pagamento na API do Mercado Pago.
     const mpRes = await fetch(
       `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
       {
-        headers: {
-          Authorization: `Bearer ${workspace.mp_access_token}`,
-        },
+        headers: { Authorization: `Bearer ${workspace.mp_access_token}` },
       },
     );
 
@@ -161,7 +113,6 @@ Deno.serve(async (req) => {
       return ok();
     }
 
-    // Cross-check: external_reference precisa bater com o vault_id (anti-spoof).
     if (payment.external_reference && payment.external_reference !== vaultId) {
       console.warn("mp-webhook: external_reference mismatch", {
         expected: vaultId,
@@ -179,15 +130,13 @@ Deno.serve(async (req) => {
       return ok();
     }
 
-    // Idempotente: só atualiza (e devolve linha) se ainda estava pendente.
-    // Sobrescreve expires_at para 7 dias a partir da confirmação (regra do pagante).
     const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: updated, error: updErr } = await supabase
       .from("vaults")
       .update({ status: "paid", expires_at: newExpiresAt })
       .eq("id", vaultId)
       .neq("status", "paid")
-      .select("title, client_email, public_slug")
+      .select("title, client_email, client_name, public_slug, owner_id, price")
       .maybeSingle();
 
     if (updErr) {
@@ -199,39 +148,76 @@ Deno.serve(async (req) => {
       return ok();
     }
 
-    const resendKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendKey) {
-      console.error("mp-webhook: RESEND_API_KEY missing");
-      return ok();
-    }
-    if (!updated.client_email) {
-      console.warn("mp-webhook: vault has no client_email", vaultId);
-      return ok();
-    }
-
-    const link = `${PUBLIC_APP_URL}/pay/${updated.public_slug}`;
-    const subject = `Seu arquivo "${updated.title}" está liberado! 🔓`;
-
-    const resendRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: [updated.client_email],
-        subject,
-        html: buildEmailHtml(updated.title, link),
-      }),
-    });
-
-    if (!resendRes.ok) {
-      const errBody = await resendRes.text().catch(() => "");
-      console.error("mp-webhook: resend error", resendRes.status, errBody);
+    // 1) E-mail para o CLIENTE (já existia)
+    if (updated.client_email) {
+      const link = `${PUBLIC_APP_URL}/pay/${updated.public_slug}`;
+      const safeTitle = escapeHtml(updated.title);
+      const result = await sendResendEmail({
+        to: updated.client_email,
+        subject: `Seu arquivo "${updated.title}" está liberado! 🔓`,
+        heading: "Pagamento confirmado 🔓",
+        bodyHtml: `<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#4b5563;">
+          Recebemos seu pagamento e o arquivo <strong>${safeTitle}</strong> já está liberado para download.
+        </p>`,
+        ctaLabel: "Acessar e baixar arquivo",
+        ctaUrl: link,
+      });
+      if (!result.ok) {
+        console.error("mp-webhook: client email failed", result.status, result.error);
+      } else {
+        console.log("mp-webhook: client release email sent", vaultId);
+      }
     } else {
-      await resendRes.text().catch(() => "");
-      console.log("mp-webhook: release email sent", vaultId);
+      console.warn("mp-webhook: vault has no client_email", vaultId);
+    }
+
+    // 2) E-mail para o PROFISSIONAL (dono do cofre)
+    try {
+      const { data: ownerProfile, error: profErr } = await supabase
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", updated.owner_id)
+        .maybeSingle();
+
+      if (profErr) {
+        console.error("mp-webhook: owner profile lookup error", profErr);
+      } else if (!ownerProfile?.email) {
+        console.warn("mp-webhook: owner has no email", updated.owner_id);
+      } else {
+        const dashboardUrl = `${PUBLIC_APP_URL}/dashboard`;
+        const safeTitle = escapeHtml(updated.title);
+        const safeClient = escapeHtml(updated.client_name);
+        const priceStr = formatBRL(Number(updated.price));
+        const greeting = ownerProfile.full_name
+          ? `Olá, ${escapeHtml(ownerProfile.full_name.split(" ")[0])}! 💸`
+          : "Pix recebido! 💸";
+
+        const result = await sendResendEmail({
+          to: ownerProfile.email,
+          subject: `💸 Pix recebido: ${updated.title} (${priceStr})`,
+          heading: greeting,
+          bodyHtml: `<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#4b5563;">
+              O pagamento do cofre <strong>${safeTitle}</strong> foi confirmado.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;padding:16px;margin:0 0 24px;">
+              <tr><td style="font-size:13px;color:#4b5563;line-height:1.8;">
+                <strong>Cliente:</strong> ${safeClient}<br/>
+                <strong>Valor:</strong> ${priceStr}<br/>
+                <strong>Cofre:</strong> ${safeTitle}
+              </td></tr>
+            </table>`,
+          ctaLabel: "Ver no Dashboard",
+          ctaUrl: dashboardUrl,
+          footerNote: "Você receberá outro aviso quando o cliente baixar o arquivo.",
+        });
+        if (!result.ok) {
+          console.error("mp-webhook: owner email failed", result.status, result.error);
+        } else {
+          console.log("mp-webhook: owner payment email sent", vaultId);
+        }
+      }
+    } catch (ownerErr) {
+      console.error("mp-webhook: owner email unexpected error", ownerErr);
     }
 
     return ok();
