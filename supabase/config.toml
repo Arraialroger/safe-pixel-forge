@@ -26,3 +26,7 @@ verify_jwt = false
 
 [functions.cleanup-expired-vaults]
 verify_jwt = false
+
+[functions.log-vault-event]
+verify_jwt = false
+
