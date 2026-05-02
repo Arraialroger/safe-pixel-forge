@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 import { z } from "npm:zod@3.23.8";
 import { sendResendEmail, escapeHtml, PUBLIC_APP_URL } from "../_shared/resend.ts";
+import { recordVaultEvent } from "../_shared/events.ts";
 
 const BodySchema = z.object({
   slug: z.string().min(1).max(64),

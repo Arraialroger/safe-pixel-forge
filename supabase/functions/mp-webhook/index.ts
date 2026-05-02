@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { sendResendEmail, escapeHtml, PUBLIC_APP_URL } from "../_shared/resend.ts";
+import { recordVaultEvent } from "../_shared/events.ts";
 
 // Webhook público — Mercado Pago não envia JWT.
 // Sempre responde 200 para evitar reentrega infinita; erros são apenas logados.
@@ -147,6 +148,10 @@ Deno.serve(async (req) => {
       console.log("mp-webhook: race — vault already paid", vaultId);
       return ok();
     }
+
+    // Registra evento de pagamento aprovado (após o UPDATE atômico).
+    await recordVaultEvent(supabase, vaultId, "payment_approved");
+
 
     // 1) E-mail para o CLIENTE (já existia)
     if (updated.client_email) {
