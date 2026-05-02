@@ -197,6 +197,15 @@ export function VaultCard({ vault }: VaultCardProps) {
                 )}
                 Reenviar e-mail
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setHistoryOpen(true);
+                }}
+              >
+                <History className="mr-2 h-4 w-4" />
+                Ver histórico
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={(e) => {
