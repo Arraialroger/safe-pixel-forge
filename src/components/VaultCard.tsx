@@ -212,7 +212,7 @@ export function VaultCard({ vault }: VaultCardProps) {
                   setHistoryOpen(true);
                 }}
               >
-                <History className="mr-2 h-4 w-4" />
+                <HistoryIcon className="mr-2 h-4 w-4" />
                 Ver histórico
               </DropdownMenuItem>
               <DropdownMenuSeparator />
