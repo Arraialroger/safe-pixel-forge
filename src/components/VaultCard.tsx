@@ -313,6 +313,23 @@ export function VaultCard({ vault }: VaultCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HistoryIcon className="h-4 w-4 text-muted-foreground" />
+              Histórico do cofre
+            </DialogTitle>
+            <DialogDescription className="truncate">
+              {vault.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 max-h-[60vh] overflow-y-auto pr-1">
+            <VaultTimeline vaultId={vault.id} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }
