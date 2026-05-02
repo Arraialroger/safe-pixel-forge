@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
@@ -10,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { usePublicOwnerBranding } from "@/hooks/useBranding";
 import { CheckoutCardSkeleton } from "@/components/skeletons/CheckoutCardSkeleton";
+import { logVaultEvent } from "@/lib/events";
 
 const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
