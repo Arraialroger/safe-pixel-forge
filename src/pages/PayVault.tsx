@@ -60,6 +60,16 @@ export default function PayVault() {
     },
   });
 
+  // Dispara page_viewed uma única vez por sessão (com guard contra Strict Mode).
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data?.id) return;
+    if (viewedRef.current === data.id) return;
+    if (isVaultExpired(data) || data.status === "paid") return;
+    viewedRef.current = data.id;
+    void logVaultEvent(data.id, "page_viewed");
+  }, [data]);
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8 sm:py-10">
       <CheckoutHeader ownerId={data?.owner_id ?? null} />
@@ -99,6 +109,8 @@ export default function PayVault() {
 function CheckoutCard({ vault }: { vault: PublicVault }) {
   const payMutation = useMutation({
     mutationFn: async () => {
+      // Fire-and-forget: registra que o cliente iniciou o checkout antes do redirect.
+      void logVaultEvent(vault.id, "checkout_started");
       const { data, error } = await supabase.functions.invoke<{
         init_point: string;
         error?: string;
