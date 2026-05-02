@@ -50,6 +50,35 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          vault_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          vault_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          vault_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_events_vault_id_fkey"
+            columns: ["vault_id"]
+            isOneToOne: false
+            referencedRelation: "vaults"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vaults: {
         Row: {
           client_email: string | null

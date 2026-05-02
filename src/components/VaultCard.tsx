@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock, History as HistoryIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel, isExpired, formatExpiryDate } from "@/data/mockVaults";
 import { isExpiringSoon, expiringLabel } from "@/utils/vault";
@@ -22,6 +22,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { VaultTimeline } from "@/components/VaultTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -37,6 +45,7 @@ export function VaultCard({ vault }: VaultCardProps) {
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   async function handleCopy() {
     const url = `${window.location.origin}/pay/${vault.public_slug}`;
@@ -197,6 +206,15 @@ export function VaultCard({ vault }: VaultCardProps) {
                 )}
                 Reenviar e-mail
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setHistoryOpen(true);
+                }}
+              >
+                <HistoryIcon className="mr-2 h-4 w-4" />
+                Ver histórico
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={(e) => {
@@ -295,6 +313,23 @@ export function VaultCard({ vault }: VaultCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HistoryIcon className="h-4 w-4 text-muted-foreground" />
+              Histórico do cofre
+            </DialogTitle>
+            <DialogDescription className="truncate">
+              {vault.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 max-h-[60vh] overflow-y-auto pr-1">
+            <VaultTimeline vaultId={vault.id} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

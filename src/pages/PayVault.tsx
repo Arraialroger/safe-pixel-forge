@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
@@ -10,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { usePublicOwnerBranding } from "@/hooks/useBranding";
 import { CheckoutCardSkeleton } from "@/components/skeletons/CheckoutCardSkeleton";
+import { logVaultEvent } from "@/lib/events";
 
 const PROCESSING_STATUSES = new Set(["pending", "in_process", "in_mediation"]);
 
@@ -58,6 +60,16 @@ export default function PayVault() {
     },
   });
 
+  // Dispara page_viewed uma única vez por sessão (com guard contra Strict Mode).
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data?.id) return;
+    if (viewedRef.current === data.id) return;
+    if (isVaultExpired(data) || data.status === "paid") return;
+    viewedRef.current = data.id;
+    void logVaultEvent(data.id, "page_viewed");
+  }, [data]);
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8 sm:py-10">
       <CheckoutHeader ownerId={data?.owner_id ?? null} />
@@ -97,6 +109,8 @@ export default function PayVault() {
 function CheckoutCard({ vault }: { vault: PublicVault }) {
   const payMutation = useMutation({
     mutationFn: async () => {
+      // Fire-and-forget: registra que o cliente iniciou o checkout antes do redirect.
+      void logVaultEvent(vault.id, "checkout_started");
       const { data, error } = await supabase.functions.invoke<{
         init_point: string;
         error?: string;

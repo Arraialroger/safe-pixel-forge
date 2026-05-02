@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 import { z } from "npm:zod@3.23.8";
 import { sendResendEmail, escapeHtml, PUBLIC_APP_URL } from "../_shared/resend.ts";
+import { recordVaultEvent } from "../_shared/events.ts";
 
 const BodySchema = z.object({
   slug: z.string().min(1).max(64),
@@ -73,7 +74,8 @@ Deno.serve(async (req) => {
       if (claimErr) {
         console.error("get-download-url: claim error", claimErr);
       } else if (claimed) {
-        // Ganhamos a corrida: enviar e-mail ao profissional.
+        // Ganhamos a corrida: registra evento de download e envia e-mail ao profissional.
+        await recordVaultEvent(supabase, vault.id, "downloaded");
         try {
           const { data: ownerProfile, error: profErr } = await supabase
             .from("profiles")

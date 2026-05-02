@@ -350,3 +350,66 @@ Cofres possuem uma "data de validade" dupla, controlada pela coluna `vaults.expi
 
 - **Sem cron jobs / sem deleção física automática**: nem no frontend nem nas Edge Functions atuais. A remoção dos arquivos do bucket `vault-files` será feita manualmente via SQL/Storage API quando necessário.
 - A função `get-download-url` não foi alterada — quando o arquivo for fisicamente removido, `createSignedUrl` falhará naturalmente; e antes disso a UI já bloqueia o acesso.
+
+## Fase 12 — Rastreamento de Eventos (`vault_events`)
+
+Log de atividades por cofre para dar visibilidade ao profissional sobre a jornada do cliente (recuperação de venda, prova social, debugging).
+
+### Schema
+
+Tabela `public.vault_events`:
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `vault_id` (uuid, FK → `vaults.id` `ON DELETE CASCADE`)
+- `event_type` (text, **`CHECK IN ('page_viewed', 'checkout_started', 'payment_approved', 'downloaded')`**)
+- `created_at` (timestamptz, default `now()`)
+- Índice composto `(vault_id, created_at DESC)` para a Timeline.
+
+**RLS**: SELECT apenas para o owner do cofre (via `EXISTS` em `vaults`). **Não há policies de INSERT/UPDATE/DELETE** — todos os writes acontecem via `service_role` nas Edge Functions, eliminando a possibilidade de manipulação pelo cliente.
+
+> Decisão: usar `text + CHECK` em vez de `enum` Postgres. Permite adicionar novos tipos (ex.: `whatsapp_clicked`) com uma simples migração de constraint, sem `ALTER TYPE`.
+
+### Tipos de evento e onde são gravados
+
+| `event_type` | Disparo | Origem |
+| --- | --- | --- |
+| `page_viewed` | Cliente abre `/pay/:slug` | Frontend → `log-vault-event` (público, com dedupe 60s) |
+| `checkout_started` | Clique em "Pagar e Liberar Arquivo" | Frontend → `log-vault-event` (antes do redirect ao MP) |
+| `payment_approved` | Webhook MP confirma `approved` | Backend `mp-webhook` (após `UPDATE` atômico) |
+| `downloaded` | Primeiro download do arquivo | Backend `get-download-url` (dentro do bloco da trava `downloaded_at IS NULL`) |
+
+### Edge Function `log-vault-event` (`verify_jwt = false`)
+
+Endpoint público para os dois eventos passivos do lado do cliente.
+
+1. Body validado por Zod: `{ vault_id: uuid, event_type: 'page_viewed' | 'checkout_started' }`. **Allowlist no servidor**: `payment_approved` e `downloaded` são rejeitados (400) — só o backend pode gravá-los, evitando spoofing de "pagamento aprovado" pelo cliente.
+2. Verifica que o `vault_id` existe; se não, retorna `200 ok` sem inserir (não vaza informação).
+3. **Dedupe de 60s** por `(vault_id, event_type)`: se houver evento idêntico em janela de 60s, retorna `{ ok: true, deduped: true }` sem inserir. Evita poluição da timeline e custo desnecessário em F5 acidentais.
+4. Insert via `service_role`. Sempre responde 200 (silencioso em erro de DB).
+
+### Helper compartilhado
+
+`supabase/functions/_shared/events.ts` exporta `recordVaultEvent(supabase, vaultId, eventType)` — usado por `mp-webhook` e `get-download-url` para padronizar o insert e log de erros (não-fatal).
+
+### Frontend
+
+- **`src/lib/events.ts`** → `logVaultEvent(vaultId, eventType)`: wrapper fire-and-forget sobre `supabase.functions.invoke('log-vault-event', ...)`. Nunca lança.
+- **`PayVault.tsx`**:
+  - `useEffect + useRef` (`viewedRef`) dispara `page_viewed` uma única vez por cofre/sessão (guard contra Strict Mode duplicar). Só dispara quando o cofre existe, não está expirado e não está pago.
+  - `payMutation.mutationFn` chama `logVaultEvent(vault.id, 'checkout_started')` antes do `invoke('create-payment')`.
+- **`src/components/VaultTimeline.tsx`**: lê `vault_events` filtrando por `vault_id` ordenado `created_at DESC`. Lista vertical com guia (border-left), ícone circular semântico por tipo e timestamp relativo (`date-fns/formatDistanceToNow` em `pt-BR`). Empty state amigável.
+
+  | Evento | Ícone (lucide) | Cor (token) |
+  | --- | --- | --- |
+  | `page_viewed` | `Eye` | `text-muted-foreground` |
+  | `checkout_started` | `ShoppingCart` | `text-primary` |
+  | `payment_approved` | `CheckCircle2` | `text-success` |
+  | `downloaded` | `Download` | `text-vault` |
+
+- **`VaultCard.tsx`**: novo item no `DropdownMenu` — **"Ver histórico"** (ícone `History`) abre um `Dialog` com `<VaultTimeline vaultId={vault.id} />`. Mantém a grid limpa (sem inflar o card).
+
+### Custos / performance
+
+- 1 INSERT por evento; `vault_events` é write-light, read-light (só consultado quando o owner abre o histórico).
+- O dedupe de 60s no `log-vault-event` adiciona 1 SELECT barato por chamada (indexado por `(vault_id, created_at DESC)`).
+- Sem polling: a Timeline é re-buscada apenas quando o `Dialog` abre.
+
