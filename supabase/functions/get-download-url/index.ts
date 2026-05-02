@@ -74,7 +74,8 @@ Deno.serve(async (req) => {
       if (claimErr) {
         console.error("get-download-url: claim error", claimErr);
       } else if (claimed) {
-        // Ganhamos a corrida: enviar e-mail ao profissional.
+        // Ganhamos a corrida: registra evento de download e envia e-mail ao profissional.
+        await recordVaultEvent(supabase, vault.id, "downloaded");
         try {
           const { data: ownerProfile, error: profErr } = await supabase
             .from("profiles")
