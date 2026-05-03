@@ -1,4 +1,4 @@
-# Cofre — Especificação Técnica
+# PixelSafe — Especificação Técnica
 
 Fonte da verdade do projeto. Atualizar ao final de cada fase.
 
@@ -10,6 +10,8 @@ Fonte da verdade do projeto. Atualizar ao final de cada fase.
 - **Routing**: React Router v6
 - **Backend**: Supabase (Auth, Postgres, Storage, Edge Functions)
 - **Pagamentos**: Mercado Pago (Checkout Pro / Preferences API)
+- **E-mails transacionais**: Resend (helper compartilhado `_shared/resend.ts`)
+- **Assinaturas SaaS**: Asaas (Pix, boleto e cartão)
 
 ## Estrutura do Banco (Supabase)
 
@@ -29,6 +31,8 @@ Cofre = entrega de projeto + cobrança vinculada.
 - `file_path`, `file_name` (referência ao bucket `vault-files`)
 - `public_slug` (string curta única, default 12 chars de uuid) — usada na URL pública
 - `created_at`
+- `expires_at` (timestamptz, nullable, default `now() + interval '30 days'`) — Fase 10. Sobrescrito pelo `mp-webhook` para `now() + 7 dias` quando o pagamento é confirmado.
+- `downloaded_at` (timestamptz, nullable) — Fase 11. Trava atômica usada por `get-download-url` (`UPDATE ... WHERE downloaded_at IS NULL`) para garantir que o e-mail "Cliente baixou" ao dono seja disparado **uma única vez**, mesmo com múltiplos cliques no botão de download.
 - **RLS**:
   - `Owners manage own vaults`: ALL para `authenticated` quando `owner_id = auth.uid()`.
   - `Public can read vaults`: SELECT para `anon` e `authenticated` (necessário para o checkout público funcionar pelo slug).
@@ -38,6 +42,11 @@ Configurações por dono — guarda credenciais sensíveis do vendedor. Populada
 - `id` (uuid, PK), `owner_id`, `mp_access_token`, `created_at`
 - **Constraint**: `UNIQUE (mp_access_token)` — um mesmo Access Token do Mercado Pago não pode ser vinculado a mais de uma conta no PixelSafe (regra antifraude contra múltiplas contas do mesmo vendedor). O frontend (`Settings → MercadoPagoCard`) intercepta o erro Postgres `23505` e mostra um toast amigável: _"Este token do Mercado Pago já está vinculado a outra conta no PixelSafe."_
 - **RLS**: owner-only (`owner_id = auth.uid()`).
+
+### `vault_events`
+Log de atividades por cofre (Fase 12). Detalhes na seção própria.
+- `id`, `vault_id` (FK → `vaults.id` ON DELETE CASCADE), `event_type` (text + CHECK), `created_at`.
+- **RLS**: SELECT apenas para o owner do cofre. Sem policies de INSERT/UPDATE/DELETE (writes via `service_role`).
 
 ### Storage
 - Bucket **`vault-files`** (privado). Layout: `${user_id}/${vault_id}/${nome_seguro}`.
@@ -54,6 +63,7 @@ Convenção de query keys (evita colisão entre componentes que selecionam shape
 - `["profile-settings", userId]` — Tela de Configurações (full_name, email, custom_logo_url).
 - `["workspace", userId]` — workspace do owner.
 - `["public-owner-branding", ownerId]` — checkout público (via Edge Function).
+- `["vault-events", vaultId]` — Timeline de eventos (Fase 12).
 
 ## Rotas
 
@@ -61,10 +71,13 @@ Convenção de query keys (evita colisão entre componentes que selecionam shape
 | --- | --- | --- |
 | `/` | público | Landing |
 | `/login` | público | Autenticação Supabase |
+| `/forgot-password` | público | Solicitação de recuperação de senha (Fase 9) |
+| `/reset-password` | público | Definição de nova senha via token de recovery (Fase 9) |
+| `/install` | público | Instruções de instalação PWA (Fase 9) |
 | `/pay/:slug` | público | Checkout do cofre pelo `public_slug` |
 | `/dashboard` | autenticado | Lista de cofres do owner + KPIs financeiros |
 | `/clientes` | autenticado | Mini-CRM derivado dos cofres (sem tabela própria) |
-| `/configuracoes` | autenticado | Multi-tenant: edição de perfil, upload de logo, integração Mercado Pago e plano (placeholder SaaS) |
+| `/configuracoes` | autenticado | Multi-tenant: edição de perfil, upload de logo, integração Mercado Pago e plano (Asaas) |
 | `*` | público | NotFound |
 
 Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
@@ -86,13 +99,32 @@ Layout autenticado em `src/layouts/AuthenticatedLayout.tsx` (sidebar + outlet).
   - `pending` → mensagem de cobrança ("Acesse o link seguro para realizar o pagamento e liberar o download…").
   - `paid` → mensagem de download ("Pagamento confirmado! Seu arquivo já está disponível para download…").
 - **Reenviar e-mail**: item no `DropdownMenu` (ícone `Mail`, `Loader2` durante `isPending`) que invoca a Edge Function `resend-vault-email`. O backend escolhe o template com base no status atual (cobrança vs liberação). Toast de sucesso/erro com a mensagem retornada.
+- **Ver histórico**: item no `DropdownMenu` (ícone `History`) abre um `Dialog` com `<VaultTimeline vaultId={vault.id} />` (Fase 12).
 - **Excluir**: remove arquivo do storage (best-effort) e a linha em `vaults`. Confirmação via `AlertDialog`.
+
+## Helpers compartilhados (`supabase/functions/_shared/`)
+
+Centralizam boilerplate consumido por múltiplas Edge Functions.
+
+### `_shared/resend.ts`
+Padroniza envio de e-mails transacionais via Resend e o layout HTML (mantém uma única fonte de verdade visual e evita duplicação de markup).
+- `sendResendEmail({ to, subject, heading, bodyHtml, ctaLabel?, ctaUrl?, footerNote? })` — monta o layout responsivo (table-based, compatível com clientes de e-mail), injeta CTA opcional e dispara via `https://api.resend.com/emails`. Retorna `{ ok, status, error? }`.
+- `escapeHtml(s)` — sanitiza interpolações dinâmicas no HTML.
+- `PUBLIC_APP_URL` — resolve `Deno.env.get("PUBLIC_APP_URL")` com fallback para a URL publicada.
+- `From` fixo: `PixelSafe <suporte@pixelsafe.com.br>`.
+
+Consumidores: `send-vault-created`, `resend-vault-email`, `mp-webhook` (cliente + dono), `get-download-url` (dono).
+
+### `_shared/events.ts`
+Padroniza inserts em `vault_events` a partir do backend (com `service_role`).
+- Tipo exportado `VaultEventType = 'page_viewed' | 'checkout_started' | 'payment_approved' | 'downloaded'`.
+- `recordVaultEvent(supabase, vaultId, eventType)` — insert não-fatal (loga erro mas não lança), usado pelos triggers internos do `mp-webhook` e do `get-download-url`. Eventos públicos (`page_viewed`, `checkout_started`) passam pela Edge Function `log-vault-event` com allowlist + dedupe.
 
 ## Pagamento — Edge Functions
 
 Em `supabase/functions/`. Configuração de auth em `supabase/config.toml`:
-- `create-payment`, `mp-webhook`, `get-download-url`, `get-owner-branding` → `verify_jwt = false` (rotas públicas / chamadas pelo Mercado Pago).
-- `send-vault-created`, `resend-vault-email` → `verify_jwt = true` (somente o dono autenticado dispara).
+- `verify_jwt = false` (rotas públicas / chamadas externas): `create-payment`, `mp-webhook`, `get-download-url`, `get-owner-branding`, `asaas-webhook`, `cleanup-expired-vaults` (autenticada por secret próprio), `log-vault-event`.
+- `verify_jwt = true` (somente dono autenticado dispara): `send-vault-created`, `resend-vault-email`, `asaas-checkout`.
 
 ### `create-payment`
 Entrada: `{ vault_id: uuid }`. Fluxo:
@@ -113,26 +145,30 @@ Endpoint público chamado pelo Mercado Pago em vários estágios do pagamento (p
 4. `GET https://api.mercadopago.com/v1/payments/{paymentId}` com `Authorization: Bearer {mp_access_token}`.
 5. **Anti-spoof**: se `payment.external_reference` existir e for ≠ `vault_id`, ignora.
 6. Se `payment.status !== "approved"` → log + `200 OK` sem alterar DB.
-7. Caso `approved`: `UPDATE vaults SET status='paid' WHERE id=vault_id AND status<>'paid' RETURNING title, client_email, public_slug` (idempotente).
-8. Se houve mudança e há `client_email`, dispara e-mail de liberação via Resend:
-   - From: `PixelSafe <suporte@pixelsafe.com.br>`
-   - Subject: `Seu arquivo "{title}" está liberado! 🔓`
-   - HTML com CTA para `${PUBLIC_APP_URL}/pay/${public_slug}`.
+7. Caso `approved`: `UPDATE vaults SET status='paid', expires_at = now() + 7d WHERE id=vault_id AND status<>'paid' RETURNING title, client_email, client_name, public_slug, owner_id, price` (idempotente; o `expires_at` é renovado para janela de 7 dias da Fase 10).
+8. Após o update atômico bem-sucedido, registra evento `payment_approved` via `recordVaultEvent` (Fase 12).
+9. Dispara **dois** e-mails via `_shared/resend.ts`:
+   - **Cliente** (se houver `client_email`): assunto `Seu arquivo "{title}" está liberado! 🔓`, CTA → `${PUBLIC_APP_URL}/pay/${public_slug}`.
+   - **Profissional / dono** (Fase 11): busca `profiles(email, full_name)` por `owner_id`. Assunto `💸 Pix recebido: {title} ({R$ valor})` com bloco resumo (cliente, valor BRL formatado via `Intl.NumberFormat`, título do cofre), CTA "Ver no Dashboard" e nota de rodapé avisando que outro e-mail será enviado quando o cliente baixar.
+10. Falhas de e-mail são logadas mas **não-fatais** — o webhook sempre responde 200.
 
 ### `get-download-url`
 Entrada: `{ slug: string }`. Fluxo:
-1. Busca o vault pelo `public_slug`.
-2. Se `status !== 'paid'` → `403`.
+1. Busca o vault pelo `public_slug` (campos: `id, status, file_path, downloaded_at, owner_id, client_name, title`).
+2. Se `status !== 'paid'` → `403`. Se `file_path` for `null` (ex.: cofre limpo pela Fase 10.1) → `409`.
 3. Gera Signed URL de **15 minutos** (`vault-files`, `createSignedUrl(file_path, 900)`).
-4. Retorna `{ signed_url }`. O frontend abre em nova aba.
+4. **Trava atômica de primeiro download** (Fase 11): se `downloaded_at IS NULL`, executa `UPDATE vaults SET downloaded_at = now() WHERE id = ? AND downloaded_at IS NULL RETURNING id`. Apenas a chamada que **ganha a corrida** (linha retornada) executa o pós-processamento:
+   - Registra evento `downloaded` via `recordVaultEvent` (Fase 12).
+   - Busca `profiles(email, full_name)` do owner e envia e-mail "📥 Cliente baixou: {title}" via `_shared/resend.ts`, com CTA "Ver no Dashboard". Falha de e-mail é não-fatal.
+5. Reentradas subsequentes pulam todo o pós-processamento e apenas devolvem o `signed_url` — evita spam de e-mails ao dono caso o cliente clique em "Baixar" várias vezes.
+6. Retorna `{ signed_url }`. O frontend abre em nova aba.
 
 ### `send-vault-created`
 Entrada: `{ vault_id: uuid }`. Disparada pelo `NewVaultDialog` após criar o cofre, se o checkbox "Enviar link por e-mail" estiver marcado.
 1. Valida JWT do owner via `getClaims`.
 2. Carrega vault com service-role e confere `vault.owner_id === claims.sub` (403 se não bater).
 3. Se não há `client_email`, retorna `{ skipped: true }`.
-4. Envia e-mail via Resend:
-   - From: `PixelSafe <suporte@pixelsafe.com.br>`
+4. Envia e-mail via `_shared/resend.ts`:
    - Subject: `Arquivo de {title} disponível para liberação 🔐`
    - CTA → `${PUBLIC_APP_URL}/pay/${public_slug}`.
 5. Falha de envio retorna 502; o frontend trata como warning não-bloqueante.
@@ -159,6 +195,8 @@ Reenvio manual sob demanda (botão "Reenviar e-mail" no `VaultCard`). `verify_jw
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` (gerenciadas).
 - `RESEND_API_KEY` (configurada).
 - `PUBLIC_APP_URL` (opcional, fallback hardcoded para a URL publicada).
+- `CLEANUP_SECRET` (Fase 10.1) — autentica a `cleanup-expired-vaults`.
+- `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN`, `ASAAS_ENV` (Fase 8).
 
 ## Página `/configuracoes` (multi-tenant)
 
@@ -166,7 +204,7 @@ Tela 100% baseada em dados reais (TanStack Query) da conta autenticada.
 
 - **Card "Perfil e marca"**: lê/edita `profiles.full_name` e gerencia upload de logo no bucket `logos` (path `${user.id}/logo_imagem.{ext}`, `upsert: true`). Persiste a URL pública limpa em `profiles.custom_logo_url`; o cache-busting é aplicado em runtime via `query.dataUpdatedAt`. Suporta remoção da logo.
 - **Card "Integração financeira — Mercado Pago"**: lê/edita `workspaces.mp_access_token`. Quando já existe um token, exibe apenas `APP_USR-••••-{4_últimos}` em fonte monoespaçada com botão "Substituir token". Input sempre `type="password"`.
-- **Card "Plano"**: placeholder visual ("Beta") com texto indicando que a cobrança SaaS chega na V1.0. Botão "Gerenciar plano" desabilitado com tooltip "Em breve".
+- **Card "Plano"**: card real do Plano Pro (Fase 8 — Asaas).
 
 Hook compartilhado `src/hooks/useBranding.ts`:
 - `useOwnerBranding()` — para a Sidebar autenticada (lê `profiles` direto via RLS owner-only).
@@ -176,10 +214,11 @@ A `Logo` (`src/components/Logo.tsx`) aceita `customLogoUrl`; se presente, render
 
 ## Estados da página `/pay/:slug`
 
-A página lê o status do cofre no Supabase + o query param `?status=` adicionado pelas `back_urls` do MP. Decisão:
+A página lê o status do cofre no Supabase + o query param `?status=` adicionado pelas `back_urls` do MP. Decisão (ordem de prioridade):
 
 | Estado do cofre | `?status=` na URL | UI renderizada |
 | --- | --- | --- |
+| `expires_at` no passado | qualquer | **ExpiredCard** (prioridade máxima) |
 | `paid` | qualquer | **SuccessCard** (verde, botão "Baixar arquivo") |
 | `pending` | `pending` / `in_process` / `in_mediation` | **ProcessingCard** (âmbar, sem botão de pagar; faz polling a cada 10s para flipar quando o webhook confirmar) |
 | `pending` | ausente / outro | **CheckoutCard** (botão "Pagar e Liberar Arquivo") |
@@ -190,14 +229,12 @@ A `ProcessingCard` exibe a mensagem: _"Recebemos o seu pedido! Estamos aguardand
 
 ## PLG / Plano gratuito (V0)
 
-Enquanto a cobrança SaaS (Fase 8 / Asaas) não está ativa, vale o limite **`FREE_PLAN_LIMIT = 1` cofre por owner**. A catraca vive no `NewVaultDialog`:
+Enquanto a cobrança SaaS (Fase 8 / Asaas) não está ativa para a conta, vale o limite **`FREE_PLAN_LIMIT = 1` cofre por owner**. A catraca vive no `NewVaultDialog`:
 
 - Hook `useQuery({ queryKey: ["vaults-count", userId], head: true, count: "exact" })` calcula a contagem com 1 round-trip barato (sem trazer linhas) já filtrado pela RLS.
-- O botão "Novo Cofre" deixa de ser `DialogTrigger` direto. O `onClick` chama `handleNewClick()`: se `count >= FREE_PLAN_LIMIT`, abre um `AlertDialog` ("Limite do plano gratuito atingido") em vez do modal de criação. O botão "Entendi" apenas fecha (Fase 8 ligará no checkout Asaas).
+- O botão "Novo Cofre" deixa de ser `DialogTrigger` direto. O `onClick` chama `handleNewClick()`: se `count >= FREE_PLAN_LIMIT` **e** `!subscriptionActive`, abre um `AlertDialog` ("Limite do plano gratuito atingido") com CTA "Assinar agora" → `/configuracoes`. Assinante Pro cria cofres ilimitados.
 - **Defesa em profundidade**: a `mutationFn` refaz o `count` antes do `INSERT` e aborta com mensagem amigável caso uma corrida entre abas tenha furado o guard do frontend.
 - A `onSuccess` invalida `["vaults-count", userId]` além de `["vaults"]`.
-
-A enforcement definitiva (RLS / edge function checando `subscription_status`) chega na Fase 8.
 
 ## Mini-CRM (`/clientes`)
 
@@ -256,15 +293,15 @@ Idempotente:
   - `overdue`: badge âmbar + botão **Pagar fatura** (mesmo fluxo, devolve a fatura overdue).
   - `active`: badge verde + **Gerenciar assinatura** abre o portal do cliente Asaas (`sandbox.asaas.com/customerInvoices` ou `www.asaas.com/customerInvoices`).
   - Botão **Atualizar status** força `refetch()` após o pagamento.
-- **Catraca PLG (`NewVaultDialog`)**: além do `count >= FREE_PLAN_LIMIT`, agora exige `!subscriptionActive`. Assinante pode criar cofres ilimitados. Botão "Assinar agora" do `AlertDialog` redireciona para `/configuracoes`. A defesa em profundidade na `mutationFn` aplica a mesma regra.
+- **Catraca PLG (`NewVaultDialog`)**: além do `count >= FREE_PLAN_LIMIT`, exige `!subscriptionActive`. Assinante pode criar cofres ilimitados. Botão "Assinar agora" do `AlertDialog` redireciona para `/configuracoes`. A defesa em profundidade na `mutationFn` aplica a mesma regra.
 - **Banner global (`AuthenticatedLayout`)**: se `isOverdue`, renderiza barra âmbar acima do `<main>` com CTA "Regularizar" → `/configuracoes`.
 
 ## Pendências (próximas fases)
 
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
-- **Fase 7.6 — Hardening de isolamento na tabela `vaults`**: substituir a política `Public can read vaults` (`USING (true)`) por uma VIEW `vaults_public` com `security_invoker=on` expondo apenas as colunas necessárias ao checkout (`id`, `public_slug`, `title`, `price`, `client_name`, `status`, `custom_logo_url` do owner) e bloquear o `SELECT` direto da tabela base para `anon`. Isso elimina a dependência exclusiva do filtro client-side `.eq("owner_id", ...)` (hoje aplicado em Dashboard, Clients e Catraca PLG como defesa em profundidade) e impede qualquer vazamento futuro caso uma nova tela esqueça o filtro.
+- **Fase 7.6 — Hardening de isolamento na tabela `vaults`**: substituir a política `Public can read vaults` (`USING (true)`) por uma VIEW `vaults_public` com `security_invoker=on` expondo apenas as colunas necessárias ao checkout (`id`, `public_slug`, `title`, `price`, `client_name`, `status`, `custom_logo_url` do owner) e bloquear o `SELECT` direto da tabela base para `anon`.
 - Revogar `asaas_subscription_id` no Asaas (`DELETE /subscriptions/{id}`) caso o usuário cancele dentro do app — hoje o cancelamento é feito apenas pelo portal do cliente Asaas.
-
+- Configurar agendador externo (cron / Supabase Scheduled Trigger) para disparar `cleanup-expired-vaults` em produção, caso ainda não esteja configurado.
 
 ## Fase 9 — Identidade Visual (Ciano), Soft UI, Mobile-First e Recovery
 
@@ -298,58 +335,90 @@ Idempotente:
 - **PayVault**: paddings ajustados para mobile (`px-4 py-8 sm:py-10`).
 
 ### Fluxo de recuperação de senha
-- **`/login`**: novo link "Esqueci minha senha" abaixo do botão Entrar (apenas no modo `signin`).
-- **`/forgot-password`** (rota pública, `src/pages/ForgotPassword.tsx`):
-  - Form com 1 campo (email).
-  - `supabase.auth.resetPasswordForEmail(email, { redirectTo: ${origin}/reset-password })`.
-  - Após sucesso mostra estado "Verifique seu email".
-- **`/reset-password`** (rota pública, `src/pages/ResetPassword.tsx`):
-  - O Supabase entrega o token no fragment (`#access_token=...&type=recovery`) e o `onAuthStateChange` (em `useAuth`) cria a sessão automaticamente.
-  - Detecta `type=recovery` no hash e mostra um estado "Link inválido ou expirado" se a sessão de recovery não existir e o usuário não estiver logado.
-  - Form com `password` + confirmação (mín. 6 chars). Em sucesso chama `supabase.auth.updateUser({ password })` e redireciona para `/dashboard`.
-  - Limpa o hash da URL via `history.replaceState` para evitar reentrega do token.
+- **`/login`**: link "Esqueci minha senha" abaixo do botão Entrar (apenas no modo `signin`).
+- **`/forgot-password`** (`src/pages/ForgotPassword.tsx`): form com 1 campo (email). Chama `supabase.auth.resetPasswordForEmail(email, { redirectTo: ${origin}/reset-password })`. Após sucesso mostra estado "Verifique seu email".
+- **`/reset-password`** (`src/pages/ResetPassword.tsx`): o Supabase entrega o token no fragment (`#access_token=...&type=recovery`) e o `onAuthStateChange` (em `useAuth`) cria a sessão automaticamente. Detecta `type=recovery` no hash e mostra "Link inválido ou expirado" se a sessão de recovery não existir e o usuário não estiver logado. Form com `password` + confirmação (mín. 6 chars). Em sucesso chama `supabase.auth.updateUser({ password })` e redireciona para `/dashboard`. Limpa o hash da URL via `history.replaceState`.
 
-### Página /install (PWA Experience informativa)
+### Página `/install` (PWA Experience informativa)
 - Rota pública `src/pages/Install.tsx`.
-- Dois cards lado a lado em desktop / empilhados em mobile com instruções passo-a-passo:
+- Dois cards lado a lado em desktop / empilhados em mobile com instruções:
   - **iPhone (Safari)**: Compartilhar → Adicionar à Tela de Início → Adicionar.
   - **Android (Chrome)**: menu ⋮ → Adicionar à tela inicial / Instalar app → Confirmar.
-- Botão "Instalar no celular" adicionado ao `Login.tsx` apontando para `/install`.
-- **Importante**: ainda não há manifest PWA nem service worker shippado. A página orienta o uso da função nativa de "Adicionar à Tela Inicial" do navegador, que funciona com a configuração atual. Caso queiramos suporte real a offline/install prompt nativo, adicionar `vite-plugin-pwa` em fase futura (decisão consciente para evitar problemas de cache no preview do editor).
+- Botão "Instalar no celular" no `Login.tsx` apontando para `/install`.
+- **Importante**: ainda não há manifest PWA nem service worker shippado. Decisão consciente para evitar problemas de cache no preview do editor.
 
-### Rotas públicas (atualizadas)
-- `/`, `/login`, `/forgot-password`, `/reset-password`, `/install`, `/pay/:slug`.
-
-
-## Política de Retenção (Fase 10)
+## Fase 10 — Política de Retenção
 
 Cofres possuem uma "data de validade" dupla, controlada pela coluna `vaults.expires_at` (timestamptz, nullable), que minimiza custos de Storage do SaaS.
 
 ### Regras de negócio
 
-- **Inadimplente (default)**: ao criar um cofre, o Postgres define automaticamente `expires_at = now() + interval '30 days'` via `DEFAULT` na coluna. O frontend não precisa enviar nada.
-- **Pagante**: quando a Edge Function `mp-webhook` confirma o pagamento real (status `approved` na API do Mercado Pago), o `UPDATE` que muda `status` para `paid` também sobrescreve `expires_at` para exatamente **7 dias** a partir daquele momento (`Date.now() + 7d`, em ISO).
+- **Inadimplente (default)**: ao criar um cofre, o Postgres define automaticamente `expires_at = now() + interval '30 days'` via `DEFAULT` na coluna.
+- **Pagante**: quando a Edge Function `mp-webhook` confirma o pagamento real (status `approved`), o `UPDATE` que muda `status` para `paid` também sobrescreve `expires_at` para exatamente **7 dias** a partir daquele momento.
 - **Idempotência preservada**: o update continua usando `.neq("status", "paid")` para que reentregas do webhook não resetem a data.
 
 ### Comportamento da UI
 
 - **Página pública `/pay/:slug`** (`src/pages/PayVault.tsx`):
-  - O `select` agora inclui `expires_at`.
   - Helper local `isVaultExpired(vault)` compara `new Date(expires_at) < Date.now()`.
-  - Ordem de renderização: `ExpiredCard` → `SuccessCard` → `ProcessingCard` → `CheckoutCard`. Expirado tem prioridade absoluta (bloqueia tanto pagamento quanto download).
-  - `ExpiredCard`: card Soft UI com ícone `AlertTriangle` em destructive suave, título "Cofre expirado" e mensagem "Este cofre expirou e o arquivo foi removido dos nossos servidores por segurança."
-  - `CheckoutCard`: ganhou um aviso discreto abaixo do CTA: "Por motivos de segurança, o arquivo ficará disponível para download por 7 dias após a confirmação do pagamento."
-- **Dashboard / `VaultCard`** (`src/components/VaultCard.tsx`):
+  - Ordem de renderização: `ExpiredCard` → `SuccessCard` → `ProcessingCard` → `CheckoutCard`. Expirado tem prioridade absoluta.
+  - `ExpiredCard`: card Soft UI com ícone `AlertTriangle`, título "Cofre expirado" e mensagem informando que o arquivo foi removido.
+  - `CheckoutCard`: aviso "Por motivos de segurança, o arquivo ficará disponível para download por 7 dias após a confirmação do pagamento."
+- **Dashboard / `VaultCard`**:
   - Helper compartilhado `isExpired(vault)` em `src/data/mockVaults.ts`.
-  - Badge muda para "Expirado" em tom destructive quando `isExpired === true` (sobrescreve "Pago"/"Pendente").
+  - Badge muda para "Expirado" em tom destructive quando `isExpired === true`.
   - Linha sutil com ícone `CalendarClock` exibe "Expira em DD/MM/AAAA" (ou "Expirou em ..." em destructive).
-  - Quando expirado, ficam **desabilitados**: "Copiar link", botão WhatsApp e o item "Reenviar e-mail" do dropdown — não faz sentido distribuir um link inacessível.
-  - Continua **habilitado**: "Excluir cofre" (designer pode limpar manualmente).
+  - Quando expirado, ficam **desabilitados**: "Copiar link", botão WhatsApp e "Reenviar e-mail". Continua **habilitado**: "Excluir cofre".
 
-### Não-objetivos (decisão consciente)
+## Fase 10.1 — Cleanup automático (`cleanup-expired-vaults`)
 
-- **Sem cron jobs / sem deleção física automática**: nem no frontend nem nas Edge Functions atuais. A remoção dos arquivos do bucket `vault-files` será feita manualmente via SQL/Storage API quando necessário.
-- A função `get-download-url` não foi alterada — quando o arquivo for fisicamente removido, `createSignedUrl` falhará naturalmente; e antes disso a UI já bloqueia o acesso.
+Edge Function pública (`verify_jwt = false`) responsável pela **deleção física** dos arquivos de cofres já expirados, complementando o bloqueio de UI da Fase 10.
+
+### Autenticação
+- Header `Authorization: Bearer ${CLEANUP_SECRET}` **ou** header `x-cleanup-secret: ${CLEANUP_SECRET}`.
+- Falha de match → `401 Unauthorized`.
+- Secret ausente no ambiente → `500 Server misconfigured` (fail-closed).
+
+### Lógica
+1. `SELECT id, file_path FROM vaults WHERE expires_at < now() AND file_path IS NOT NULL` (via `service_role`).
+2. Para cada vault:
+   - `storage.from('vault-files').remove([file_path])`.
+   - `UPDATE vaults SET file_path = NULL, file_name = NULL WHERE id = ?`.
+   - Falhas individuais não abortam o sweep; são acumuladas em `failures[]`.
+3. Resposta: `{ cleaned_vaults, scanned, failures: [{ id, reason }] }`.
+
+### Operação
+- Disparada por **agendador externo** (cron de provedor próprio, GitHub Actions, ou Supabase Scheduled Trigger). **Não há trigger no Postgres.**
+- Como `get-download-url` retorna `409` quando `file_path` é `null`, e a UI já trata `expires_at` antes, o cleanup é seguro mesmo se rodar com latência.
+
+> Esta seção substitui o antigo "não-objetivo" da Fase 10 que afirmava ausência de deleção física automática — agora ela existe e está documentada.
+
+## Fase 11 — Notificações ao Profissional
+
+Objetivo: dar ao designer/profissional o "Radar do Chefe" — visibilidade em tempo real dos dois marcos críticos da entrega — sem inundar a caixa de entrada com duplicatas.
+
+### Coluna `vaults.downloaded_at`
+- `timestamptz`, nullable.
+- Funciona como **gate atômico**: só a transação que conseguir `UPDATE vaults SET downloaded_at = now() WHERE id = ? AND downloaded_at IS NULL` ganha o direito de disparar o e-mail "Cliente baixou". Concorrência resolvida 100% no Postgres, sem precisar de locks distribuídos ou filas.
+
+### Notificações enviadas
+
+| Gatilho | Onde dispara | Assunto | CTA |
+| --- | --- | --- | --- |
+| Pagamento aprovado pelo MP | `mp-webhook` (após `UPDATE status='paid'` atômico) | `💸 Pix recebido: {title} ({R$ valor})` | "Ver no Dashboard" |
+| Primeiro download do arquivo | `get-download-url` (dentro do bloco da trava `downloaded_at IS NULL`) | `📥 Cliente baixou: {title}` | "Ver no Dashboard" |
+
+Ambos os e-mails:
+- Vão para `profiles.email` do `owner_id` do cofre.
+- São enviados via `_shared/resend.ts` (template padrão com saudação opcional pelo primeiro nome do `full_name`).
+- Falha do Resend é **não-fatal** — apenas logada, sem quebrar o webhook nem o download.
+
+### Anti-spam (decisão arquitetural)
+- O e-mail "Pix recebido" só dispara após o `UPDATE ... WHERE status<>'paid'` ter retornado linha — reentregas do MP não geram duplicata.
+- O e-mail "Cliente baixou" só dispara para a chamada que ganhou o gate atômico do `downloaded_at`. Cliques subsequentes em "Baixar arquivo" devolvem o `signed_url` sem novo e-mail.
+
+### E-mail ao cliente (mantido)
+O e-mail de liberação ao **cliente final** (assunto `Seu arquivo "{title}" está liberado! 🔓`) continua sendo disparado pelo `mp-webhook` como antes — a Fase 11 apenas adicionou as duas notificações ao profissional sem alterar o fluxo existente do cliente.
 
 ## Fase 12 — Rastreamento de Eventos (`vault_events`)
 
@@ -374,8 +443,8 @@ Tabela `public.vault_events`:
 | --- | --- | --- |
 | `page_viewed` | Cliente abre `/pay/:slug` | Frontend → `log-vault-event` (público, com dedupe 60s) |
 | `checkout_started` | Clique em "Pagar e Liberar Arquivo" | Frontend → `log-vault-event` (antes do redirect ao MP) |
-| `payment_approved` | Webhook MP confirma `approved` | Backend `mp-webhook` (após `UPDATE` atômico) |
-| `downloaded` | Primeiro download do arquivo | Backend `get-download-url` (dentro do bloco da trava `downloaded_at IS NULL`) |
+| `payment_approved` | Webhook MP confirma `approved` | Backend `mp-webhook` (após `UPDATE` atômico) via `_shared/events.ts` |
+| `downloaded` | Primeiro download do arquivo | Backend `get-download-url` (dentro do bloco da trava `downloaded_at IS NULL`) via `_shared/events.ts` |
 
 ### Edge Function `log-vault-event` (`verify_jwt = false`)
 
@@ -383,12 +452,8 @@ Endpoint público para os dois eventos passivos do lado do cliente.
 
 1. Body validado por Zod: `{ vault_id: uuid, event_type: 'page_viewed' | 'checkout_started' }`. **Allowlist no servidor**: `payment_approved` e `downloaded` são rejeitados (400) — só o backend pode gravá-los, evitando spoofing de "pagamento aprovado" pelo cliente.
 2. Verifica que o `vault_id` existe; se não, retorna `200 ok` sem inserir (não vaza informação).
-3. **Dedupe de 60s** por `(vault_id, event_type)`: se houver evento idêntico em janela de 60s, retorna `{ ok: true, deduped: true }` sem inserir. Evita poluição da timeline e custo desnecessário em F5 acidentais.
+3. **Dedupe de 60s** por `(vault_id, event_type)`: se houver evento idêntico em janela de 60s, retorna `{ ok: true, deduped: true }` sem inserir.
 4. Insert via `service_role`. Sempre responde 200 (silencioso em erro de DB).
-
-### Helper compartilhado
-
-`supabase/functions/_shared/events.ts` exporta `recordVaultEvent(supabase, vaultId, eventType)` — usado por `mp-webhook` e `get-download-url` para padronizar o insert e log de erros (não-fatal).
 
 ### Frontend
 
@@ -405,11 +470,10 @@ Endpoint público para os dois eventos passivos do lado do cliente.
   | `payment_approved` | `CheckCircle2` | `text-success` |
   | `downloaded` | `Download` | `text-vault` |
 
-- **`VaultCard.tsx`**: novo item no `DropdownMenu` — **"Ver histórico"** (ícone `History`) abre um `Dialog` com `<VaultTimeline vaultId={vault.id} />`. Mantém a grid limpa (sem inflar o card).
+- **`VaultCard.tsx`**: item no `DropdownMenu` — **"Ver histórico"** (ícone `History`) abre um `Dialog` com `<VaultTimeline vaultId={vault.id} />`.
 
 ### Custos / performance
 
 - 1 INSERT por evento; `vault_events` é write-light, read-light (só consultado quando o owner abre o histórico).
 - O dedupe de 60s no `log-vault-event` adiciona 1 SELECT barato por chamada (indexado por `(vault_id, created_at DESC)`).
 - Sem polling: a Timeline é re-buscada apenas quando o `Dialog` abre.
-
