@@ -35,7 +35,7 @@ Cofre = entrega de projeto + cobrança vinculada.
 - `downloaded_at` (timestamptz, nullable) — Fase 11. Trava atômica usada por `get-download-url` (`UPDATE ... WHERE downloaded_at IS NULL`) para garantir que o e-mail "Cliente baixou" ao dono seja disparado **uma única vez**, mesmo com múltiplos cliques no botão de download.
 - **RLS**:
   - `Owners manage own vaults`: ALL para `authenticated` quando `owner_id = auth.uid()`.
-  - `Public can read vaults`: SELECT para `anon` e `authenticated` (necessário para o checkout público funcionar pelo slug).
+  - **Acesso anônimo revogado** (Fase 7.6 — hardening de segurança): a antiga policy `Public can read vaults` (`USING (true)`) foi removida porque expunha PII dos clientes (`client_email`, `client_whatsapp`) a qualquer visitante. O checkout público agora consome a tabela exclusivamente via RPC `public.get_public_vault_by_slug(_slug text)` — função `SECURITY DEFINER`, `STABLE`, com `search_path = public` e `EXECUTE` concedido a `anon` e `authenticated`. A RPC retorna apenas o subconjunto seguro de colunas necessário ao checkout: `id`, `title`, `client_name`, `price`, `status`, `public_slug`, `file_name`, `owner_id`, `expires_at`. Nenhum campo sensível (e-mail, WhatsApp, `file_path`) é exposto ao frontend público.
 
 ### `workspaces`
 Configurações por dono — guarda credenciais sensíveis do vendedor. Populada automaticamente pelo trigger `handle_new_user`.
@@ -299,7 +299,6 @@ Idempotente:
 ## Pendências (próximas fases)
 
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
-- **Fase 7.6 — Hardening de isolamento na tabela `vaults`**: substituir a política `Public can read vaults` (`USING (true)`) por uma VIEW `vaults_public` com `security_invoker=on` expondo apenas as colunas necessárias ao checkout (`id`, `public_slug`, `title`, `price`, `client_name`, `status`, `custom_logo_url` do owner) e bloquear o `SELECT` direto da tabela base para `anon`.
 - Revogar `asaas_subscription_id` no Asaas (`DELETE /subscriptions/{id}`) caso o usuário cancele dentro do app — hoje o cancelamento é feito apenas pelo portal do cliente Asaas.
 - Configurar agendador externo (cron / Supabase Scheduled Trigger) para disparar `cleanup-expired-vaults` em produção, caso ainda não esteja configurado.
 

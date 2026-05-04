@@ -43,13 +43,12 @@ export default function PayVault() {
     queryKey: ["public-vault", slug],
     enabled: !!slug,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vaults")
-        .select("id, title, client_name, price, status, public_slug, file_name, owner_id, expires_at")
-        .eq("public_slug", slug!)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc("get_public_vault_by_slug", {
+        _slug: slug!,
+      });
       if (error) throw error;
-      return data as PublicVault | null;
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row ?? null) as PublicVault | null;
     },
     // Enquanto está em "processando", faz polling para flipar para Sucesso quando o webhook confirmar.
     refetchInterval: (query) => {
