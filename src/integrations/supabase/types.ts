@@ -156,7 +156,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_public_vault_by_slug: {
+        Args: { _slug: string }
+        Returns: {
+          client_name: string
+          expires_at: string
+          file_name: string
+          id: string
+          owner_id: string
+          price: number
+          public_slug: string
+          status: string
+          title: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
