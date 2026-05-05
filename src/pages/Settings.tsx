@@ -500,6 +500,12 @@ function MercadoPagoCard({ userId }: { userId: string }) {
     </section>
   );
 }
+
+// ============================================================
+// Plano (Asaas)
+// ============================================================
+
+function PlanCard() {
   const { user } = useAuthReady();
   const { status, isActive, isOverdue, isLoading, refetch } = useSubscription();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
