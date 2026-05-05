@@ -476,3 +476,46 @@ Endpoint público para os dois eventos passivos do lado do cliente.
 - 1 INSERT por evento; `vault_events` é write-light, read-light (só consultado quando o owner abre o histórico).
 - O dedupe de 60s no `log-vault-event` adiciona 1 SELECT barato por chamada (indexado por `(vault_id, created_at DESC)`).
 - Sem polling: a Timeline é re-buscada apenas quando o `Dialog` abre.
+
+## Fase 13 — Marketplace OAuth e Split Dinâmico
+
+A partir desta fase o PixelSafe opera como **plataforma marketplace** do Mercado Pago. O profissional não cola mais o Access Token manualmente — ele autoriza o PixelSafe via OAuth — e a plataforma retém uma comissão dinâmica por venda.
+
+### 13.1 OAuth do Mercado Pago
+
+**Variáveis de ambiente / secrets envolvidos:**
+- Frontend (`.env`): `VITE_MP_CLIENT_ID` (Client ID público do app no MP), `VITE_PUBLIC_APP_URL`.
+- Backend (Supabase secrets): `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `PUBLIC_APP_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+**Tabela `workspaces` — colunas adicionadas:** `mp_refresh_token`, `mp_public_key`, `mp_user_id`. A coluna legada `mp_access_token` continua existindo e é a chave usada por `create-payment` e `mp-webhook` para autenticar requisições no MP.
+
+**Frontend (`Settings → MercadoPagoCard`):**
+- Quando **não conectado**: botão "Conectar Mercado Pago" redireciona (`window.location.href`) para
+  `https://auth.mercadopago.com.br/authorization?client_id=${VITE_MP_CLIENT_ID}&response_type=code&platform_id=mp&state=${user.id}&redirect_uri=${VITE_SUPABASE_URL}/functions/v1/mp-oauth-callback`.
+- O `state` carrega o `auth.uid()` do usuário logado (correlaciona o callback ao workspace correto).
+- Quando **conectado**: badge verde com `CheckCircle2`, prefixo/sufixo do `mp_user_id` e botão "Reconectar" que reinicia o fluxo OAuth.
+- Ao montar a página, lê `?mp_connected=true|false` da URL e exibe um toast (sucesso ou erro), depois remove o param via `history.replaceState`.
+
+**Edge function `mp-oauth-callback` (`verify_jwt = false`):**
+1. Lê `code`, `state` e `error` da query string. Se faltar algo, redireciona para `${PUBLIC_APP_URL}/configuracoes?mp_connected=false`.
+2. POST `https://api.mercadopago.com/oauth/token` com `grant_type=authorization_code`, `client_id`, `client_secret`, `code` e `redirect_uri` (mesma URL pública desta função). Body codificado como `application/x-www-form-urlencoded`.
+3. Usa um Supabase client com **service_role** para `UPDATE workspaces SET mp_access_token, mp_refresh_token, mp_public_key, mp_user_id WHERE owner_id = state`.
+4. Redireciona para `${PUBLIC_APP_URL}/configuracoes?mp_connected=true` em caso de sucesso, ou `mp_connected=false` em qualquer falha. Erros são logados (`console.error`) sem expor detalhes ao usuário.
+
+> **Nota de segurança**: a função é `verify_jwt = false` porque o MP redireciona o navegador (sem header `Authorization`). A confiança é estabelecida pelo par `(code, redirect_uri)` validado pelo MP e pelo `state` (UID do dono) — só o próprio usuário enxerga seu UID na URL gerada localmente. O token só é gravado se o `state` corresponder a um `workspaces.owner_id` válido.
+
+### 13.2 Split Dinâmico (`create-payment`)
+
+A regra de comissão da plataforma agora é calculada por venda, em função do plano do **dono do cofre** (não do cliente final).
+
+1. Após carregar o `vault`, busca `profiles.subscription_status WHERE id = vault.owner_id`.
+2. Calcula:
+   - **Plano Pro ativo** (`subscription_status === 'active'`): `marketplace_fee = 0` (assinatura Asaas já cobre a plataforma).
+   - **PayGo (qualquer outro status)**: `marketplace_fee = round(price * 0.029, 2)`.
+3. O campo `marketplace_fee` é incluído no body do `POST https://api.mercadopago.com/checkout/preferences`. O `Authorization: Bearer` continua sendo o `mp_access_token` do workspace do **dono do cofre** — o MP debita a comissão do recebimento do vendedor e credita na conta do app (PixelSafe) automaticamente.
+
+### 13.3 Pontos de atenção operacionais
+
+- A `redirect_uri` (`${SUPABASE_URL}/functions/v1/mp-oauth-callback`) precisa estar registrada nas configurações do app no Mercado Pago.
+- Em ambientes de preview do Lovable, `PUBLIC_APP_URL` aponta para o domínio de produção (`https://app.pixelsafe.com.br`); o usuário será redirecionado para lá ao final do OAuth.
+- O `mp_refresh_token` ainda não é consumido por nenhuma function — está armazenado para uso futuro (renovação automática quando o `mp_access_token` expirar).
