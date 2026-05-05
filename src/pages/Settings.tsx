@@ -380,14 +380,8 @@ function ProfileCard({ userId }: { userId: string }) {
 // Mercado Pago
 // ============================================================
 
-function maskToken(token: string): string {
-  const last4 = token.slice(-4);
-  return `APP_USR-••••-${last4}`;
-}
-
 function MercadoPagoCard({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState(false);
 
   const workspaceQuery = useQuery({
     queryKey: ["workspace", userId],
@@ -395,7 +389,7 @@ function MercadoPagoCard({ userId }: { userId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workspaces")
-        .select("mp_access_token")
+        .select("mp_access_token, mp_user_id")
         .eq("owner_id", userId)
         .maybeSingle();
       if (error) throw error;
@@ -403,56 +397,57 @@ function MercadoPagoCard({ userId }: { userId: string }) {
     },
   });
 
-  const form = useForm<TokenForm>({
-    resolver: zodResolver(tokenSchema),
-    defaultValues: { mp_access_token: "" },
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async (values: TokenForm) => {
-      const { error } = await supabase
-        .from("workspaces")
-        .update({ mp_access_token: values.mp_access_token })
-        .eq("owner_id", userId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
+  // Lê ?mp_connected=true|false e mostra toast.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const flag = params.get("mp_connected");
+    if (flag === "true") {
       toast({
-        title: "Integração salva",
-        description: "Seu token do Mercado Pago foi armazenado com segurança.",
+        title: "Mercado Pago conectado",
+        description: "Sua conta foi vinculada com sucesso.",
       });
-      form.reset({ mp_access_token: "" });
-      setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["workspace", userId] });
-    },
-    onError: (err: unknown) => {
-      console.error(err);
-      const e = err as { code?: string; message?: string };
-      const msg = (e?.message ?? "").toLowerCase();
-      const isUnique =
-        e?.code === "23505" ||
-        msg.includes("mp_access_token") ||
-        msg.includes("duplicate") ||
-        msg.includes("unique");
-      if (isUnique) {
-        toast({
-          title: "Token já vinculado",
-          description:
-            "Este token do Mercado Pago já está vinculado a outra conta no PixelSafe.",
-          variant: "destructive",
-        });
-        return;
-      }
+    } else if (flag === "false") {
       toast({
-        title: "Erro ao salvar token",
+        title: "Falha ao conectar",
+        description: "Não foi possível vincular sua conta do Mercado Pago. Tente novamente.",
         variant: "destructive",
       });
-    },
-  });
+    }
+    if (flag) {
+      params.delete("mp_connected");
+      const qs = params.toString();
+      const newUrl = window.location.pathname + (qs ? `?${qs}` : "");
+      window.history.replaceState({}, "", newUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isLoading = workspaceQuery.isLoading;
-  const currentToken = workspaceQuery.data?.mp_access_token ?? null;
-  const showInput = !currentToken || editing;
+  const isConnected = !!workspaceQuery.data?.mp_access_token;
+  const mpUserId = workspaceQuery.data?.mp_user_id ?? null;
+
+  function handleConnect() {
+    const clientId = import.meta.env.VITE_MP_CLIENT_ID as string | undefined;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    if (!clientId) {
+      toast({
+        title: "Configuração ausente",
+        description: "VITE_MP_CLIENT_ID não está definido.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const redirectUri = `${supabaseUrl}/functions/v1/mp-oauth-callback`;
+    const authUrl =
+      `https://auth.mercadopago.com.br/authorization` +
+      `?client_id=${encodeURIComponent(clientId)}` +
+      `&response_type=code` +
+      `&platform_id=mp` +
+      `&state=${encodeURIComponent(userId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    window.location.href = authUrl;
+  }
 
   return (
     <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-6">
@@ -462,7 +457,7 @@ function MercadoPagoCard({ userId }: { userId: string }) {
             Integração financeira — Mercado Pago
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Cole seu Access Token de produção. Ele é usado para criar as cobranças dos seus cofres.
+            Conecte sua conta do Mercado Pago via OAuth. As cobranças dos seus cofres caem direto na sua conta.
           </p>
         </div>
         <KeyRound className="h-4 w-4 text-muted-foreground" />
@@ -470,87 +465,41 @@ function MercadoPagoCard({ userId }: { userId: string }) {
 
       {isLoading ? (
         <Skeleton className="h-9 w-full" />
-      ) : (
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))}
-            className="space-y-4"
-          >
-            {!showInput && currentToken && (
-              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
-                <code className="font-mono text-sm text-foreground">
-                  {maskToken(currentToken)}
+      ) : isConnected ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <span className="font-medium text-foreground">Conectado</span>
+              {mpUserId && (
+                <code className="ml-2 font-mono text-xs text-muted-foreground">
+                  ID: {mpUserId.slice(0, 4)}…{mpUserId.slice(-4)}
                 </code>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setEditing(true)}
-                >
-                  Substituir token
-                </Button>
-              </div>
-            )}
-
-            {showInput && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="mp_access_token"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Access Token</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          autoComplete="off"
-                          placeholder="APP_USR-..."
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex justify-end gap-2">
-                  {currentToken && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditing(false);
-                        form.reset({ mp_access_token: "" });
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                  )}
-                  <Button type="submit" disabled={saveMutation.isPending}>
-                    {saveMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Salvar integração
-                  </Button>
-                </div>
-              </>
-            )}
-
-            <p className="text-[11px] text-muted-foreground">
-              Seu token é armazenado de forma segura e nunca é exposto no navegador após salvo.
-            </p>
-          </form>
-        </Form>
+              )}
+            </div>
+            <Button type="button" variant="secondary" size="sm" onClick={handleConnect}>
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Reconectar
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Sua autorização é guardada com segurança e usada apenas para criar as cobranças dos seus cofres.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Button type="button" onClick={handleConnect}>
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Conectar Mercado Pago
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            Você será redirecionado para o Mercado Pago para autorizar o PixelSafe a criar cobranças em sua conta.
+          </p>
+        </div>
       )}
     </section>
   );
 }
-
-// ============================================================
-// Plano (Asaas)
-// ============================================================
-
-function PlanCard() {
   const { user } = useAuthReady();
   const { status, isActive, isOverdue, isLoading, refetch } = useSubscription();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
