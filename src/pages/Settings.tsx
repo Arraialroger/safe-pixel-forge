@@ -42,14 +42,7 @@ const profileSchema = z.object({
 });
 type ProfileForm = z.infer<typeof profileSchema>;
 
-const tokenSchema = z.object({
-  mp_access_token: z
-    .string()
-    .trim()
-    .min(20, "Token muito curto")
-    .max(200, "Token muito longo"),
-});
-type TokenForm = z.infer<typeof tokenSchema>;
+// (Token manual removido — agora é via OAuth)
 
 const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2MB
