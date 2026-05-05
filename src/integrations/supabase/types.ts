@@ -135,18 +135,27 @@ export type Database = {
           created_at: string
           id: string
           mp_access_token: string | null
+          mp_public_key: string | null
+          mp_refresh_token: string | null
+          mp_user_id: string | null
           owner_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           mp_access_token?: string | null
+          mp_public_key?: string | null
+          mp_refresh_token?: string | null
+          mp_user_id?: string | null
           owner_id: string
         }
         Update: {
           created_at?: string
           id?: string
           mp_access_token?: string | null
+          mp_public_key?: string | null
+          mp_refresh_token?: string | null
+          mp_user_id?: string | null
           owner_id?: string
         }
         Relationships: []
