@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ImagePlus, Loader2, Trash2, Lock, KeyRound, Sparkles } from "lucide-react";
+import { ImagePlus, Loader2, Trash2, Lock, KeyRound, Sparkles, CheckCircle2, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
