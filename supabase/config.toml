@@ -30,3 +30,6 @@ verify_jwt = false
 [functions.log-vault-event]
 verify_jwt = false
 
+[functions.mp-oauth-callback]
+verify_jwt = false
+

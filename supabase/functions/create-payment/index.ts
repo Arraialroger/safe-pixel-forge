@@ -62,19 +62,38 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ===== Split dinâmico =====
+    // Se o dono do cofre tem assinatura ativa (Plano Pro Asaas) → marketplace_fee = 0.
+    // Caso contrário (PayGo) → marketplace_fee = 2,9% do preço do cofre.
+    const { data: ownerProfile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("subscription_status")
+      .eq("id", vault.owner_id)
+      .maybeSingle();
+
+    if (profileErr) {
+      console.error("owner profile lookup error", profileErr);
+      return json({ error: "Erro ao buscar plano do vendedor" }, 500);
+    }
+
+    const isPro = ownerProfile?.subscription_status === "active";
+    const price = Number(vault.price);
+    // Mercado Pago aceita marketplace_fee em BRL com até 2 casas decimais.
+    const marketplaceFee = isPro ? 0 : Math.round(price * 0.029 * 100) / 100;
+
     const origin =
       req.headers.get("origin") ?? `https://${vault.public_slug}.lovable.app`;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const notificationUrl = `${supabaseUrl}/functions/v1/mp-webhook?vault_id=${vault.id}`;
 
-    const preferenceBody = {
+    const preferenceBody: Record<string, unknown> = {
       items: [
         {
           title: vault.title,
           quantity: 1,
           currency_id: "BRL",
-          unit_price: Number(vault.price),
+          unit_price: price,
         },
       ],
       external_reference: vault.id,
@@ -85,6 +104,7 @@ Deno.serve(async (req) => {
       },
       auto_return: "approved",
       notification_url: notificationUrl,
+      marketplace_fee: marketplaceFee,
     };
 
     const mpRes = await fetch(
