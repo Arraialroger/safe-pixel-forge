@@ -39,9 +39,9 @@ Cofre = entrega de projeto + cobrança vinculada.
 
 ### `workspaces`
 Configurações por dono — guarda credenciais sensíveis do vendedor. Populada automaticamente pelo trigger `handle_new_user`.
-- `id` (uuid, PK), `owner_id`, `mp_access_token`, `created_at`
-- **Constraint**: `UNIQUE (mp_access_token)` — um mesmo Access Token do Mercado Pago não pode ser vinculado a mais de uma conta no PixelSafe (regra antifraude contra múltiplas contas do mesmo vendedor). O frontend (`Settings → MercadoPagoCard`) intercepta o erro Postgres `23505` e mostra um toast amigável: _"Este token do Mercado Pago já está vinculado a outra conta no PixelSafe."_
-- **RLS**: owner-only (`owner_id = auth.uid()`).
+- `id` (uuid, PK), `owner_id`, `mp_access_token`, `mp_refresh_token`, `mp_public_key`, `mp_user_id`, `created_at`.
+- A partir da **Fase 13**, esses campos são preenchidos exclusivamente pelo fluxo OAuth do Mercado Pago (edge function `mp-oauth-callback`). O input manual de Access Token foi removido da UI.
+- **RLS**: owner-only (`owner_id = auth.uid()`). O `update` da edge function `mp-oauth-callback` usa `service_role` (bypassa RLS) para gravar os tokens recebidos do MP.
 
 ### `vault_events`
 Log de atividades por cofre (Fase 12). Detalhes na seção própria.
