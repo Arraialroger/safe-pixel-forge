@@ -124,7 +124,7 @@ Padroniza inserts em `vault_events` a partir do backend (com `service_role`).
 
 Em `supabase/functions/`. Configuração de auth em `supabase/config.toml`:
 - `verify_jwt = false` (rotas públicas / chamadas externas): `create-payment`, `mp-webhook`, `get-download-url`, `get-owner-branding`, `asaas-webhook`, `cleanup-expired-vaults` (autenticada por secret próprio), `log-vault-event`.
-- `verify_jwt = true` (somente dono autenticado dispara): `send-vault-created`, `resend-vault-email`, `asaas-checkout`.
+- `verify_jwt = true` (somente dono autenticado dispara): `send-vault-created`, `resend-vault-email`, `asaas-checkout`, `cancel-subscription`.
 
 ### `create-payment`
 Entrada: `{ vault_id: uuid }`. Fluxo:
@@ -204,7 +204,7 @@ Tela 100% baseada em dados reais (TanStack Query) da conta autenticada.
 
 - **Card "Perfil e marca"**: lê/edita `profiles.full_name` e gerencia upload de logo no bucket `logos` (path `${user.id}/logo_imagem.{ext}`, `upsert: true`). Persiste a URL pública limpa em `profiles.custom_logo_url`; o cache-busting é aplicado em runtime via `query.dataUpdatedAt`. Suporta remoção da logo.
 - **Card "Integração financeira — Mercado Pago"**: lê/edita `workspaces.mp_access_token`. Quando já existe um token, exibe apenas `APP_USR-••••-{4_últimos}` em fonte monoespaçada com botão "Substituir token". Input sempre `type="password"`.
-- **Card "Plano"**: card real do Plano Pro (Fase 8 — Asaas).
+- **Card "Seu Plano"**: card unificado de gestão de plano e taxas (Fase 8 — Asaas + Fase 14 — Cancelamento in-app). Detalhes de UX e estados na seção "Frontend" da Fase 8 abaixo.
 
 Hook compartilhado `src/hooks/useBranding.ts`:
 - `useOwnerBranding()` — para a Sidebar autenticada (lê `profiles` direto via RLS owner-only).
@@ -288,18 +288,29 @@ Idempotente:
 
 ### Frontend
 - **`useSubscription`** (`src/hooks/useSubscription.ts`): lê `profiles.subscription_status` via TanStack Query (`["subscription", userId]`). Expõe `isActive`, `isOverdue`, `refetch`.
-- **`Settings → PlanCard`**: card real do Plano Pro.
-  - `inactive`: botão **Assinar Plano Pro** chama `asaas-checkout` e abre `invoiceUrl` em nova aba.
-  - `overdue`: badge âmbar + botão **Pagar fatura** (mesmo fluxo, devolve a fatura overdue).
-  - `active`: badge verde + **Gerenciar assinatura** abre o portal do cliente Asaas (`sandbox.asaas.com/customerInvoices` ou `www.asaas.com/customerInvoices`).
-  - Botão **Atualizar status** força `refetch()` após o pagamento.
+- **`Settings → PlanCard`** (refatorado na Fase 14 — UX de Planos): card unificado intitulado **"Seu Plano"** com 3 estados visuais distintos:
+  - **PayGo (default — `!isActive && !isOverdue`)**: dois blocos separados por divisor.
+    - Bloco 1 — *Plano Atual: PayGo* + badge verde "Ativo". Cópia: "Sem mensalidade. Você paga apenas a taxa de 2,9% por pagamento aprovado."
+    - Bloco 2 — Oferta de upgrade *PixelSafe Pro — R$ 39/mês*. Cópia: "Zere a taxa da plataforma (0%) e lucre 100% nas suas entregas." Contém o botão **Assinar Plano Pro** (chama `asaas-checkout` e abre `invoiceUrl` em nova aba) e o aviso de CPF/CNPJ obrigatório atrelado ao bloco.
+  - **Pro (`isActive`)**: bloco único — *Plano Atual: Pro* + badge verde "Ativo". Cópia: "Taxa da plataforma zerada (0%). Você lucra 100% nas suas entregas." Botões: **Histórico de Faturas** (outline, abre o portal do cliente Asaas em nova aba — `sandbox.asaas.com/customerInvoices` ou `www.asaas.com/customerInvoices`) e **Cancelar Assinatura** (ghost com `text-destructive`, abre `AlertDialog` de confirmação que invoca `cancel-subscription`).
+  - **Overdue (`isOverdue`)**: badge âmbar "Pagamento em atraso" + botões **Atualizar status** e **Pagar fatura** (mesmo fluxo, devolve a fatura overdue).
+  - O botão **Atualizar status** (estados PayGo/Overdue) força `refetch()` após o pagamento.
 - **Catraca PLG (`NewVaultDialog`)**: além do `count >= FREE_PLAN_LIMIT`, exige `!subscriptionActive`. Assinante pode criar cofres ilimitados. Botão "Assinar agora" do `AlertDialog` redireciona para `/configuracoes`. A defesa em profundidade na `mutationFn` aplica a mesma regra.
 - **Banner global (`AuthenticatedLayout`)**: se `isOverdue`, renderiza barra âmbar acima do `<main>` com CTA "Regularizar" → `/configuracoes`.
+
+### Edge Function `cancel-subscription` (`verify_jwt = true`)
+Cancela in-app a assinatura PixelSafe Pro do usuário autenticado (Fase 14). Disparada pelo botão "Cancelar Assinatura" do `PlanCard` após confirmação no `AlertDialog`.
+1. Valida JWT via `getClaims`. Sem claims → `401`.
+2. Cliente `admin` com `SERVICE_ROLE_KEY` lê `profiles(asaas_subscription_id, subscription_status)` do owner.
+3. Se `asaas_subscription_id` for null → `400 { error: "Sem assinatura ativa para cancelar." }`.
+4. `DELETE {asaasBaseUrl()}/subscriptions/{id}` com header `access_token: ASAAS_API_KEY`. Status `404` é tratado como **sucesso idempotente** (assinatura já cancelada lá). Outros erros não-2xx → `502`.
+5. `UPDATE profiles SET subscription_status = 'inactive' WHERE id = userId`. Mantém `asaas_subscription_id` para auditoria/histórico (não é apagado).
+6. Resposta `{ success: true }`. Frontend invalida `["subscription", userId]` e dispara `refetch()` → card colapsa para o visual PayGo.
+7. **Idempotência cruzada com `asaas-webhook`**: o webhook `SUBSCRIPTION_DELETED` chega depois e tenta o mesmo `UPDATE → 'inactive'`. Sem efeito colateral.
 
 ## Pendências (próximas fases)
 
 - Validar assinatura HMAC do webhook do Mercado Pago (header `x-signature`) como camada adicional ao cross-check de `external_reference`.
-- Revogar `asaas_subscription_id` no Asaas (`DELETE /subscriptions/{id}`) caso o usuário cancele dentro do app — hoje o cancelamento é feito apenas pelo portal do cliente Asaas.
 - Configurar agendador externo (cron / Supabase Scheduled Trigger) para disparar `cleanup-expired-vaults` em produção, caso ainda não esteja configurado.
 
 ## Fase 9 — Identidade Visual (Ciano), Soft UI, Mobile-First e Recovery

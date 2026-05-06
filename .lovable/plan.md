@@ -1,77 +1,120 @@
-## Diagnóstico do bug
+## Avaliação da abordagem
 
-Os dados são salvos corretamente no banco (confirmado pelo print da tabela `profiles`), mas somem da UI após o refresh. Há **duas causas** combinadas:
+Concordo 100% com o redesenho. O card atual realmente parece um paywall e oculta o fato de que o usuário já está ativo no PayGo. Trazer o cancelamento para dentro do app reduz fricção e churn (evita que o usuário abandone porque "não achou onde cancelar"). Tenho **3 sugestões pontuais de UX** que recomendo incorporar:
 
-### Causa 1 — Race condition de autenticação (causa principal)
-Em `useAuth.ts`, `supabase.auth.getSession()` é assíncrono. Os componentes que disparam `useQuery` montam imediatamente, e como o guard usa apenas `enabled: !!user?.id`, o React Query pode disparar a query no instante exato em que o cliente Supabase ainda **não anexou o JWT**. Resultado: `auth.uid()` retorna `null` no servidor, a RLS de `profiles` (`id = auth.uid()`) bloqueia, e `.maybeSingle()` devolve `null` **sem erro**. A UI então renderiza "vazio" como se o registro não existisse.
+1. **AlertDialog de cancelamento com fricção certa** — usar uma cópia que reforce o que ele *perde* e o que *mantém* (ex.: "Você voltará ao plano PayGo. Continuará podendo vender, mas a taxa de 2,9% por venda voltará a ser cobrada."). Isso evita arrependimento e suporte.
+2. **Estado `overdue` (atraso)** — manter o tratamento atual (badge âmbar + botão "Pagar fatura") dentro do mesmo card refatorado, para não regredir a Fase 8. O cancelamento só aparece quando `isActive` (Asaas só permite cancelar assinatura ativa de forma limpa).
+3. **Loading otimista no cancelamento** — desabilitar o botão e mostrar `Loader2` enquanto a edge function roda; após sucesso, `refetch()` da `useSubscription` + invalidate `["subscription", userId]`.
 
-A workspace às vezes "aparece" porque sua query roda um tick depois (já com o token), mas o profile sempre perde a corrida porque é consumido pela Sidebar logo no primeiro render.
-
-### Causa 2 — Colisão de cache key entre Sidebar e Settings
-- `useOwnerBranding` (Sidebar): `queryKey: ["profile", userId]` selecionando `custom_logo_url, full_name`.
-- `Settings.ProfileCard`: `queryKey: ["profile", userId]` selecionando `full_name, email, custom_logo_url`.
-
-Compartilham a mesma chave mas retornam **shapes diferentes**. Quem montar primeiro popula o cache; o segundo recebe um objeto sem o campo que precisa (ex.: `email` undefined no formulário de Configurações).
-
-### Causa 3 (menor) — Cache-buster persistido
-O `?v=${Date.now()}` está sendo gravado dentro de `custom_logo_url` no banco. Isso polui o valor canônico, complica deduplicação e faz com que o cache-buster nunca mude após salvo (perdendo o propósito). Deve ser aplicado **na renderização**, não na persistência.
+Tudo o mais segue exatamente como você pediu.
 
 ---
 
-## Plano de correção
+## Plano de execução
 
-### 1. Hook `useAuthReady` (novo)
-Criar `src/hooks/useAuthReady.ts` seguindo o padrão recomendado: combina `getSession()` + `onAuthStateChange()` e expõe `{ user, session, isReady }`. `isReady = true` somente após o `getSession()` inicial resolver, garantindo que o JWT já está no cliente Supabase antes de qualquer fetch.
+### 1. Edge Function `cancel-subscription` (nova)
 
-`useAuth` continua existindo para `signIn/signUp/signOut`, mas todos os `useQuery` que dependem de RLS passam a usar `useAuthReady` e `enabled: isReady && !!user?.id`.
+Arquivo: `supabase/functions/cancel-subscription/index.ts`. Não exige alteração em `supabase/config.toml` (default `verify_jwt = false` na infra atual; validamos o JWT em código com `getClaims`, padrão já usado em `asaas-checkout`).
 
-### 2. Separar query keys e adicionar `enabled: isReady`
-- `useOwnerBranding` → `queryKey: ["owner-branding", userId]`, `enabled: isReady && !!userId`.
-- `Settings.ProfileCard` → `queryKey: ["profile-settings", userId]`, `enabled: isReady && !!userId`.
-- `Settings.MercadoPagoCard` → `enabled: isReady && !!userId`.
-- Mutations invalidam **ambas** as keys (`owner-branding` e `profile-settings`) para manter Sidebar e Form sincronizados.
+Fluxo:
+1. `OPTIONS` → CORS.
+2. Valida `Authorization: Bearer ...` via `supabase.auth.getClaims(token)`. Sem claims → 401.
+3. Cria client `admin` com `SERVICE_ROLE_KEY`.
+4. `SELECT asaas_subscription_id, subscription_status FROM profiles WHERE id = userId`.
+5. Se `asaas_subscription_id` for null → `400 { error: "Sem assinatura ativa para cancelar." }`.
+6. `DELETE {asaasBaseUrl()}/subscriptions/{id}` com header `access_token: ASAAS_API_KEY`. Reaproveita o helper `asaasBaseUrl()` (sandbox/prod via `ASAAS_ENV`) — copiamos a função do `asaas-checkout`.
+7. Trata `404` do Asaas como sucesso idempotente (assinatura já cancelada lá).
+8. `UPDATE profiles SET subscription_status = 'inactive' WHERE id = userId` (mantém `asaas_subscription_id` para histórico/auditoria — não apagamos para fins de log).
+9. Retorna `{ success: true }`. Falhas inesperadas → 500 com log no console.
 
-### 3. Remover cache-buster do banco
-- Storage upload continua igual (`upsert: true`).
-- `custom_logo_url` armazena apenas a URL pública limpa (`pub.publicUrl`).
-- O `?v=timestamp` é aplicado **na hora de renderizar** (Sidebar, preview no Settings, Logo público no checkout), usando o `created_at`/`updated_at` do profile **ou** simplesmente um timestamp armazenado em memória após mutation. Solução simples: derivar o cache-buster a partir do hash da URL ou usar o próprio `Date.now()` apenas em retorno otimista da mutation, sem persistir.
+Observação: o `asaas-webhook` já lida com `SUBSCRIPTION_DELETED` (Fase 8). Mesmo que ele chegue depois e tente atualizar para `inactive`, é idempotente. Sem efeito colateral.
 
-### 4. Guard global no `AuthenticatedLayout`
-`AuthenticatedLayout` passa a usar `useAuthReady` e bloqueia o render dos filhos enquanto `!isReady`. Isso garante que Sidebar, Settings e qualquer página filha só montem com o token já anexado — eliminando a race em qualquer rota futura.
+### 2. Refatoração do `PlanCard` em `src/pages/Settings.tsx`
 
-### 5. Máscara e validação do WhatsApp em `NewVaultDialog`
-- Adicionar utilitário `formatBRPhone(value)` em `src/lib/phone.ts` que aceita dígitos e formata progressivamente para `(XX) XXXXX-XXXX` ou `(XX) XXXX-XXXX`.
-- No campo `client_whatsapp`:
-  - `onChange` aplica a máscara.
-  - `inputMode="tel"` + `maxLength={16}`.
-  - Validação Zod: opcional, mas se preenchido exige 10 ou 11 dígitos numéricos. Mensagem clara em português.
-- Persistir no banco apenas dígitos (`+55` opcional + DDD + número), normalizados — manter compatível com `wa.me` no template de e-mail.
-- Feedback visual: borda/texto de erro via `FormMessage` já existente; mostrar contador discreto de dígitos quando inválido.
+Substituir todo o componente `PlanCard` mantendo a busca de `cpfQuery`, o `useSubscription()` e o `handleCheckout` existentes. Estrutura nova:
 
----
+**Header do card:** título fixo "Seu Plano" + ícone `Sparkles`. Description curta abaixo.
 
-## Arquivos afetados
+**Estado `isActive` (Pro):**
+```text
+┌─────────────────────────────────────────┐
+│ Seu Plano                               │
+│                                         │
+│ Plano Atual: Pro            [● Ativo]   │
+│ Taxa da plataforma zerada (0%).         │
+│ Você lucra 100% nas suas entregas.      │
+│                                         │
+│ [Histórico de Faturas]  [Cancelar...]   │
+└─────────────────────────────────────────┘
+```
+- Botão "Histórico de Faturas" → `variant="outline"`, abre `customerPortalUrl` em nova aba (lógica atual).
+- Botão "Cancelar Assinatura" → `variant="ghost"` com `text-destructive` (link vermelho discreto, evita destacar demais a saída). Abre `<AlertDialog>`.
 
-**Criar**
-- `src/hooks/useAuthReady.ts`
-- `src/lib/phone.ts`
+**Estado `isOverdue`:** mantém comportamento atual (badge âmbar "Pagamento em atraso", botões "Atualizar status" + "Pagar fatura"). Card único, sem o split de blocos.
 
-**Editar**
-- `src/hooks/useBranding.ts` — nova query key, usar `useAuthReady`.
-- `src/pages/Settings.tsx` — nova query key, `useAuthReady`, parar de persistir `?v=`, invalidar ambas as keys.
-- `src/layouts/AuthenticatedLayout.tsx` — usar `useAuthReady`.
-- `src/components/AppSidebar.tsx` — usar `useAuthReady` (em vez de `useAuth`) onde fizer sentido.
-- `src/components/NewVaultDialog.tsx` — máscara + validação do WhatsApp.
-- `src/components/Logo.tsx` (opcional) — aceitar `cacheBust?: string | number` e concatenar `?v=` no src ao renderizar.
-- `docs/TECH_SPEC.md` — registrar o padrão `useAuthReady` e a regra "nunca persistir cache-buster".
+**Estado default (PayGo / `!isActive && !isOverdue`):**
+```text
+┌─────────────────────────────────────────┐
+│ Seu Plano                               │
+│                                         │
+│ Plano Atual: PayGo          [● Ativo]   │
+│ Sem mensalidade. Você paga apenas       │
+│ a taxa de 2,9% por pagamento aprovado.  │
+│ ─────────────────────────────────────   │
+│ PixelSafe Pro — R$ 39/mês  ✨           │
+│ Zere a taxa da plataforma (0%) e        │
+│ lucre 100% nas suas entregas.           │
+│                                         │
+│ [Atualizar status]  [Assinar Plano Pro] │
+│ ⚠ Preencha seu CPF/CNPJ no card de      │
+│   Perfil acima para liberar a           │
+│   assinatura. (se hasCpfCnpj=false)     │
+└─────────────────────────────────────────┘
+```
+- Badge "Ativo" verde reutiliza o estilo atual `bg-emerald-500/15 text-emerald-500`.
+- Divisor: `<div className="border-t border-border my-4" />`.
+- Botão "Assinar Plano Pro" e o aviso de CPF/CNPJ ficam **dentro do bloco 2** (visualmente atrelados à oferta de upgrade), não na base do card.
 
-Sem alterações de banco, RLS, Edge Functions ou Storage policies.
+### 3. AlertDialog de Cancelamento
 
----
+Adicionar `AlertDialog` (já disponível em `@/components/ui/alert-dialog`) controlado por `useState`. Conteúdo:
 
-## Critérios de aceite
+- **Title:** "Cancelar assinatura PixelSafe Pro?"
+- **Description:** "Você voltará automaticamente ao plano PayGo. Continuará podendo criar e vender cofres, mas a taxa de 2,9% sobre cada pagamento aprovado voltará a ser cobrada. Esta ação é imediata."
+- **Cancel:** "Manter Pro"
+- **Action (destructive):** "Sim, cancelar" — dispara `cancelMutation.mutate()`.
 
-1. Após refresh em `/configuracoes`, logo, nome, email e token aparecem corretamente, sem flicker de "vazio".
-2. Sidebar mostra logo customizada e nome imediatamente após salvar e após refresh.
-3. `custom_logo_url` no banco fica limpo, sem `?v=` acumulado.
-4. Campo WhatsApp em "Novo Cofre" formata enquanto digita e valida 10/11 dígitos.
+Mutation:
+```ts
+const cancelMutation = useMutation({
+  mutationFn: async () => {
+    const { error } = await supabase.functions.invoke("cancel-subscription", { body: {} });
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    toast({ title: "Assinatura cancelada", description: "Você voltou ao plano PayGo." });
+    queryClient.invalidateQueries({ queryKey: ["subscription", user?.id] });
+    refetch();
+  },
+  onError: (err) => toast({ title: "Erro ao cancelar", description: err.message, variant: "destructive" }),
+});
+```
+Botão de cancelar mostra `Loader2` quando `cancelMutation.isPending`.
+
+### 4. Atualização de `docs/TECH_SPEC.md`
+
+- Na lista de Edge Functions com `verify_jwt = true` (linha ~127), adicionar `cancel-subscription`.
+- Criar subseção `### cancel-subscription` documentando: validação de JWT, lookup de `asaas_subscription_id`, `DELETE` no Asaas (com tratamento idempotente do 404), update de `subscription_status` para `inactive`, idempotência com webhook `SUBSCRIPTION_DELETED`.
+- Na seção "Página `/configuracoes`" → reescrever a descrição do "Card Plano" detalhando os 3 estados visuais (PayGo / Pro / Overdue), o split de blocos PayGo+Upgrade e o fluxo de cancelamento via AlertDialog.
+- Em "Pendências" (final do arquivo), remover qualquer item relacionado a "cancelamento in-app" ou "gerenciamento de assinatura via portal externo".
+
+### Detalhes técnicos relevantes
+
+- **Reuso:** `asaasBaseUrl()` será copiado do `asaas-checkout` para `cancel-subscription` (mesma convenção do projeto — não há `_shared/asaas.ts` hoje, e criar um helper só por isso é over-engineering).
+- **CORS:** importar `corsHeaders` de `@supabase/supabase-js@2.95.0/cors` (mesmo padrão das outras functions).
+- **Sem migration:** nenhuma alteração de schema. Apenas leitura/update em `profiles`, RLS já permite o owner. A function usa `service_role` por consistência com `asaas-checkout`.
+- **Sem novos secrets:** `ASAAS_API_KEY` e `ASAAS_ENV` já existem.
+- **Testes manuais sugeridos após o build:**
+  1. Logar como user PayGo → ver dois blocos com badge "Ativo" no PayGo.
+  2. Assinar Pro → após webhook, card colapsa para visual single-block "Pro".
+  3. Cancelar → AlertDialog → confirmar → toast → card volta para visual PayGo (refetch automático).
