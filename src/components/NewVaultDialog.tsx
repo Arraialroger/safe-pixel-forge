@@ -430,60 +430,94 @@ export function NewVaultDialog() {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="price_masked"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-xs text-muted-foreground">
-                      Valor
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="R$ 0,00"
-                        className="bg-background"
-                        disabled={mutation.isPending}
-                        value={field.value}
-                        onChange={(e) =>
-                          field.onChange(formatBRLInput(e.target.value))
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-xs text-muted-foreground">
-                      Status
-                    </FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={(v) => field.onChange(v as VaultStatus)}
+            <FormField
+              control={form.control}
+              name="price_masked"
+              render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Valor
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="R$ 0,00"
+                      className="bg-background"
                       disabled={mutation.isPending}
+                      value={field.value}
+                      onChange={(e) =>
+                        field.onChange(formatBRLInput(e.target.value))
+                      }
+                    />
+                  </FormControl>
+                  <FormMessage className="text-xs" />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="allowed_payment_methods"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Como você quer receber?
+                  </FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={mutation.isPending}
+                      className="gap-2"
                     >
-                      <FormControl>
-                        <SelectTrigger className="bg-background">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pending">Pendente</SelectItem>
-                        <SelectItem value="paid">Pago</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
-                )}
-              />
-            </div>
+                      <label
+                        htmlFor="pm-pix"
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/50 p-3 transition-colors",
+                          field.value === "pix" && "border-primary/60 bg-accent/30",
+                        )}
+                      >
+                        <RadioGroupItem id="pm-pix" value="pix" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-medium text-foreground">
+                            Apenas Pix{" "}
+                            <span className="ml-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500">
+                              Recomendado
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Taxas menores e aprovação instantânea.
+                          </p>
+                        </div>
+                      </label>
+                      <label
+                        htmlFor="pm-all"
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/50 p-3 transition-colors",
+                          field.value === "all" && "border-primary/60 bg-accent/30",
+                        )}
+                      >
+                        <RadioGroupItem id="pm-all" value="all" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-medium text-foreground">
+                            Pix, Boleto e Cartão
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Sujeito a taxas de parcelamento do gateway.
+                          </p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage className="text-xs" />
+                </FormItem>
+              )}
+            />
+
+            <ReceivingSimulator
+              priceMasked={form.watch("price_masked")}
+              isPro={subscriptionActive}
+            />
 
             {/* Dropzone */}
             <div className="space-y-1.5">
