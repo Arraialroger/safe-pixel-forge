@@ -632,3 +632,59 @@ export function NewVaultDialog() {
     </>
   );
 }
+
+function ReceivingSimulator({
+  priceMasked,
+  isPro,
+}: {
+  priceMasked: string;
+  isPro: boolean;
+}) {
+  const price = parseBRLToNumber(priceMasked || "");
+  if (!price || price <= 0) return null;
+
+  const platformFee = isPro ? 0 : Math.round(price * 0.029 * 100) / 100;
+  const net = price - platformFee;
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="h-3.5 w-3.5 text-vault" />
+        <p className="text-xs font-medium text-foreground">Simulação de recebimento</p>
+      </div>
+      <div className="space-y-1 text-[11px]">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Valor da venda</span>
+          <span className="font-medium text-foreground">{formatBRL(price)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">
+            Taxa PixelSafe{" "}
+            {isPro ? (
+              <span className="text-vault">(Plano Pro ✨)</span>
+            ) : (
+              <>
+                (2,9%){" "}
+                <span className="text-[10px] text-vault">
+                  · Zere com o Plano Pro
+                </span>
+              </>
+            )}
+          </span>
+          <span className="font-medium text-foreground">
+            {isPro ? "R$ 0,00" : `- ${formatBRL(platformFee)}`}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Taxa Mercado Pago</span>
+          <span className="text-muted-foreground">variável (prazo)</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between border-t border-border pt-1.5">
+          <span className="font-medium text-foreground">Você recebe</span>
+          <span className="font-semibold text-foreground">~ {formatBRL(net)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
