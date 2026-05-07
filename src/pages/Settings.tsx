@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ImagePlus, Loader2, Trash2, Lock, KeyRound, Sparkles, CheckCircle2, ExternalLink } from "lucide-react";
+import { ImagePlus, Loader2, Trash2, Lock, KeyRound, Sparkles, CheckCircle2, ExternalLink, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -473,8 +474,21 @@ function MercadoPagoCard({ userId }: { userId: string }) {
         <KeyRound className="h-4 w-4 text-muted-foreground" />
       </div>
 
+      <Alert className="mb-4 border-vault/30 bg-vault/5">
+        <Info className="h-4 w-4 text-vault" />
+        <AlertDescription className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">💡 Como funcionam as taxas?</span>{" "}
+          Para processar seus pagamentos com segurança, o PixelSafe utiliza a
+          infraestrutura do Mercado Pago. O valor das suas vendas cai direto na sua
+          conta, sendo descontadas apenas as taxas padrão de gateway do Mercado Pago
+          (que variam conforme seu prazo de recebimento) e a taxa da plataforma
+          PixelSafe (apenas se você estiver no plano PayGo).
+        </AlertDescription>
+      </Alert>
+
       {isLoading ? (
         <Skeleton className="h-9 w-full" />
+
       ) : isConnected ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
