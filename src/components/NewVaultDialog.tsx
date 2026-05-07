@@ -31,18 +31,12 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { toast } from "@/hooks/use-toast";
-import { VaultStatus } from "@/data/mockVaults";
 import { formatBRLInput, parseBRLToNumber } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -86,9 +80,18 @@ const schema = z.object({
       (v) => parseBRLToNumber(v) <= 9_999_999,
       "Valor muito alto."
     ),
-  status: z.enum(["pending", "paid"]),
+  allowed_payment_methods: z.enum(["pix", "all"]),
   notify_client: z.boolean().default(true),
 });
+
+function formatBRL(value: number) {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 type FormValues = z.infer<typeof schema>;
 
@@ -131,7 +134,7 @@ export function NewVaultDialog() {
       client_email: "",
       client_whatsapp: "",
       price_masked: "",
-      status: "pending",
+      allowed_payment_methods: "pix",
       notify_client: true,
     },
   });
@@ -203,7 +206,7 @@ export function NewVaultDialog() {
           client_email: clientEmail,
           client_whatsapp: whatsapp ? whatsapp : null,
           price,
-          status: values.status,
+          allowed_payment_methods: values.allowed_payment_methods,
           owner_id: user.id,
         })
         .select()
@@ -427,60 +430,94 @@ export function NewVaultDialog() {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="price_masked"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-xs text-muted-foreground">
-                      Valor
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="R$ 0,00"
-                        className="bg-background"
-                        disabled={mutation.isPending}
-                        value={field.value}
-                        onChange={(e) =>
-                          field.onChange(formatBRLInput(e.target.value))
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem className="space-y-1.5">
-                    <FormLabel className="text-xs text-muted-foreground">
-                      Status
-                    </FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={(v) => field.onChange(v as VaultStatus)}
+            <FormField
+              control={form.control}
+              name="price_masked"
+              render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Valor
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="R$ 0,00"
+                      className="bg-background"
                       disabled={mutation.isPending}
+                      value={field.value}
+                      onChange={(e) =>
+                        field.onChange(formatBRLInput(e.target.value))
+                      }
+                    />
+                  </FormControl>
+                  <FormMessage className="text-xs" />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="allowed_payment_methods"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-xs text-muted-foreground">
+                    Como você quer receber?
+                  </FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={mutation.isPending}
+                      className="gap-2"
                     >
-                      <FormControl>
-                        <SelectTrigger className="bg-background">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pending">Pendente</SelectItem>
-                        <SelectItem value="paid">Pago</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage className="text-xs" />
-                  </FormItem>
-                )}
-              />
-            </div>
+                      <label
+                        htmlFor="pm-pix"
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/50 p-3 transition-colors",
+                          field.value === "pix" && "border-primary/60 bg-accent/30",
+                        )}
+                      >
+                        <RadioGroupItem id="pm-pix" value="pix" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-medium text-foreground">
+                            Apenas Pix{" "}
+                            <span className="ml-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500">
+                              Recomendado
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Taxas menores e aprovação instantânea.
+                          </p>
+                        </div>
+                      </label>
+                      <label
+                        htmlFor="pm-all"
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/50 p-3 transition-colors",
+                          field.value === "all" && "border-primary/60 bg-accent/30",
+                        )}
+                      >
+                        <RadioGroupItem id="pm-all" value="all" className="mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-medium text-foreground">
+                            Pix, Boleto e Cartão
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Sujeito a taxas de parcelamento do gateway.
+                          </p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage className="text-xs" />
+                </FormItem>
+              )}
+            />
+
+            <ReceivingSimulator
+              priceMasked={form.watch("price_masked")}
+              isPro={subscriptionActive}
+            />
 
             {/* Dropzone */}
             <div className="space-y-1.5">
@@ -595,3 +632,59 @@ export function NewVaultDialog() {
     </>
   );
 }
+
+function ReceivingSimulator({
+  priceMasked,
+  isPro,
+}: {
+  priceMasked: string;
+  isPro: boolean;
+}) {
+  const price = parseBRLToNumber(priceMasked || "");
+  if (!price || price <= 0) return null;
+
+  const platformFee = isPro ? 0 : Math.round(price * 0.029 * 100) / 100;
+  const net = price - platformFee;
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="h-3.5 w-3.5 text-vault" />
+        <p className="text-xs font-medium text-foreground">Simulação de recebimento</p>
+      </div>
+      <div className="space-y-1 text-[11px]">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Valor da venda</span>
+          <span className="font-medium text-foreground">{formatBRL(price)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">
+            Taxa PixelSafe{" "}
+            {isPro ? (
+              <span className="text-vault">(Plano Pro ✨)</span>
+            ) : (
+              <>
+                (2,9%){" "}
+                <span className="text-[10px] text-vault">
+                  · Zere com o Plano Pro
+                </span>
+              </>
+            )}
+          </span>
+          <span className="font-medium text-foreground">
+            {isPro ? "R$ 0,00" : `- ${formatBRL(platformFee)}`}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Taxa Mercado Pago</span>
+          <span className="text-muted-foreground">variável (prazo)</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between border-t border-border pt-1.5">
+          <span className="font-medium text-foreground">Você recebe</span>
+          <span className="font-semibold text-foreground">~ {formatBRL(net)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+

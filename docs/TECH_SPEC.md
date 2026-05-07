@@ -531,3 +531,54 @@ A regra de comissão da plataforma agora é calculada por venda, em função do 
 - A `redirect_uri` (`${SUPABASE_URL}/functions/v1/mp-oauth-callback`) precisa estar registrada nas configurações do app no Mercado Pago.
 - Em ambientes de preview do Lovable, `PUBLIC_APP_URL` aponta para o domínio de produção (`https://app.pixelsafe.com.br`); o usuário será redirecionado para lá ao final do OAuth.
 - O `mp_refresh_token` ainda não é consumido por nenhuma function — está armazenado para uso futuro (renovação automática quando o `mp_access_token` expirar).
+
+---
+
+## Fase 14 — Trust & Transparency UX
+
+Foco: dar transparência financeira ao freelancer antes da venda, eliminar fricção do formulário e dar controle sobre meios de pagamento aceitos.
+
+### 14.1 Banco de dados
+
+**Tabela `vaults` — coluna adicionada:**
+- `allowed_payment_methods text NOT NULL DEFAULT 'all'`
+- Constraint `vaults_allowed_payment_methods_check`: aceita apenas `'all'` ou `'pix'`.
+
+### 14.2 `NewVaultDialog`
+
+- **Campo Status removido** do formulário. O `INSERT` em `vaults` não envia mais `status` — cai no default da tabela (`'pending'`).
+- Novo `RadioGroup` "Como você quer receber?" com duas opções:
+  - **Apenas Pix** (recomendado) → grava `allowed_payment_methods = 'pix'`. Default do form.
+  - **Pix, Boleto e Cartão** → grava `allowed_payment_methods = 'all'`.
+- Novo bloco **Simulação de Recebimento** (`<ReceivingSimulator>`), reativo ao valor digitado:
+  - Lê `useSubscription().isActive`.
+  - PayGo: mostra valor, taxa PixelSafe (2,9% — com microcopy "Zere com o Plano Pro"), taxa MP (variável) e líquido estimado.
+  - Pro: taxa PixelSafe = R$ 0,00 (Plano Pro ✨).
+
+### 14.3 Edge function `create-payment`
+
+- O `SELECT` do vault agora inclui `allowed_payment_methods`.
+- Se `allowed_payment_methods === 'pix'`, adiciona ao `preferenceBody`:
+  ```ts
+  payment_methods: {
+    excluded_payment_types: [
+      { id: "credit_card" },
+      { id: "ticket" },
+    ],
+  }
+  ```
+- Para `'all'`, nenhum filtro é aplicado (Pix + boleto + cartão liberados).
+
+### 14.4 Microcopy de transparência (`Settings → MercadoPagoCard`)
+
+Acima do bloco de conexão MP, um `<Alert>` (variante padrão, ícone `Info`) explica em uma frase como funcionam as taxas: gateway do Mercado Pago + taxa da plataforma só no PayGo. Reduz dúvidas pré-venda e expectativas erradas.
+
+---
+
+## PWA — Manifest mínimo (instalável)
+
+O app é distribuído como **PWA manifest-only** (sem service worker), priorizando o ambiente de preview do Lovable (que sofre com cache agressivo de SW).
+
+- `public/manifest.json` declara `name`, `short_name`, `start_url=/dashboard`, `display=standalone`, `theme_color/background_color = #0A0A0A` e dois ícones (`/icon-192.png` e `/favicon.png`, ambos `purpose: "any maskable"`).
+- `index.html` inclui `<link rel="manifest">`, `theme-color`, `mobile-web-app-capable`, `apple-mobile-web-app-*` e o `apple-touch-icon` apontando para o ícone com a marca PixelSafe.
+- Resultado: Android Chrome oferece "Instalar app" com ícone correto na home; iOS Safari usa "Adicionar à Tela de Início" via `apple-touch-icon`. Sem capacidade offline (intencional).
