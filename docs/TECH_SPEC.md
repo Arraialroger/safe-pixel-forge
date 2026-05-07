@@ -355,7 +355,8 @@ Cancela in-app a assinatura PixelSafe Pro do usuário autenticado (Fase 14). Dis
   - **iPhone (Safari)**: Compartilhar → Adicionar à Tela de Início → Adicionar.
   - **Android (Chrome)**: menu ⋮ → Adicionar à tela inicial / Instalar app → Confirmar.
 - Botão "Instalar no celular" no `Login.tsx` apontando para `/install`.
-- **Importante**: ainda não há manifest PWA nem service worker shippado. Decisão consciente para evitar problemas de cache no preview do editor.
+- **Manifest-only installable** (sem service worker): `public/manifest.json` declara `name`, `short_name`, `start_url: /dashboard`, `display: standalone`, `theme_color: #0A0A0A` e ícones `icon-192.png` + `favicon.png` (512) com `purpose: "any maskable"`. `index.html` referencia `<link rel="manifest">` e meta tags `theme-color`, `apple-mobile-web-app-*`. Resultado: Android Chrome oferece "Instalar app" com abertura standalone; iOS usa `apple-touch-icon` via "Adicionar à Tela de Início".
+- **Sem service worker** intencionalmente — evita cache antigo no preview do editor Lovable. Offline não é requisito do produto.
 
 ## Fase 10 — Política de Retenção
 
