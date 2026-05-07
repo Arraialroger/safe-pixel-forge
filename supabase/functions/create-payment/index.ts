@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
     const { data: vault, error: vaultErr } = await supabase
       .from("vaults")
-      .select("id, owner_id, title, price, status, public_slug")
+      .select("id, owner_id, title, price, status, public_slug, allowed_payment_methods")
       .eq("id", vault_id)
       .maybeSingle();
 
@@ -106,6 +106,15 @@ Deno.serve(async (req) => {
       notification_url: notificationUrl,
       marketplace_fee: marketplaceFee,
     };
+
+    if (vault.allowed_payment_methods === "pix") {
+      preferenceBody.payment_methods = {
+        excluded_payment_types: [
+          { id: "credit_card" },
+          { id: "ticket" },
+        ],
+      };
+    }
 
     const mpRes = await fetch(
       "https://api.mercadopago.com/checkout/preferences",
