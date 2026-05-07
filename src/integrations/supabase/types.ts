@@ -81,6 +81,7 @@ export type Database = {
       }
       vaults: {
         Row: {
+          allowed_payment_methods: string
           client_email: string | null
           client_name: string
           client_whatsapp: string | null
@@ -97,6 +98,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          allowed_payment_methods?: string
           client_email?: string | null
           client_name: string
           client_whatsapp?: string | null
@@ -113,6 +115,7 @@ export type Database = {
           title: string
         }
         Update: {
+          allowed_payment_methods?: string
           client_email?: string | null
           client_name?: string
           client_whatsapp?: string | null

@@ -1,0 +1,2 @@
+ALTER TABLE public.vaults ADD COLUMN allowed_payment_methods text NOT NULL DEFAULT 'all';
+ALTER TABLE public.vaults ADD CONSTRAINT vaults_allowed_payment_methods_check CHECK (allowed_payment_methods IN ('all', 'pix'));
