@@ -134,7 +134,7 @@ export function NewVaultDialog() {
       client_email: "",
       client_whatsapp: "",
       price_masked: "",
-      status: "pending",
+      allowed_payment_methods: "pix",
       notify_client: true,
     },
   });
@@ -206,7 +206,7 @@ export function NewVaultDialog() {
           client_email: clientEmail,
           client_whatsapp: whatsapp ? whatsapp : null,
           price,
-          status: values.status,
+          allowed_payment_methods: values.allowed_payment_methods,
           owner_id: user.id,
         })
         .select()
