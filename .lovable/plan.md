@@ -1,68 +1,56 @@
-## Objetivo
+## Fase 14 — Trust & Transparency UX
 
-Tornar o PixelSafe instalável como app standalone no Android (e melhorar a experiência no iOS) adicionando um `manifest.json` mínimo, sem service worker. Isso evita os problemas de cache do PWA completo no preview do Lovable e mantém o desenvolvimento fluido.
+### 1. Banco de dados (migration)
+- `ALTER TABLE public.vaults ADD COLUMN allowed_payment_methods text NOT NULL DEFAULT 'all'`
+- Constraint check: valor deve ser `'all'` ou `'pix'`.
 
-## O que será feito
+### 2. `NewVaultDialog.tsx`
+- **Remover** o campo `status` do schema Zod, do `defaultValues`, do `<FormField>` e do payload do INSERT (status agora cai no default `'pending'` da tabela).
+- **Adicionar** ao schema Zod:
+  - `allowed_payment_methods: z.enum(["pix", "all"]).default("pix")`
+- **Adicionar** `RadioGroup` (shadcn) abaixo do campo Valor:
+  - "Apenas Pix" — Recomendado, taxas menores, aprovação instantânea → `pix`
+  - "Pix, Boleto e Cartão" — sujeito a taxas de parcelamento → `all`
+- **Bloco "Simulação de recebimento"** (componente local), reativo a `price_masked`:
+  - Lê `useSubscription().isActive`.
+  - PayGo: linha "Valor", "Taxa PixelSafe (2,9%) — R$ X,XX *(Zere esta taxa com o Plano Pro)*", "Taxa Mercado Pago: variável conforme prazo", "Você recebe: ~ R$ Y".
+  - Pro: "Taxa PixelSafe: R$ 0,00 (Plano Pro ✨)".
+- INSERT passa a enviar `allowed_payment_methods: values.allowed_payment_methods` (sem `status`).
 
-### 1. Gerar ícone 192×192
-- Derivar `public/icon-192.png` a partir do `public/favicon.png` atual (512×512) usando ImageMagick no sandbox.
-- Manter `public/favicon.png` (512×512) como o ícone "any/maskable" grande.
-- **Não** será necessário você enviar nenhuma imagem nova.
+### 3. `Settings.tsx` — microcopy de transparência
+- Em `MercadoPagoCard`, antes do bloco conectado/conectar, renderizar um `<Alert>` (variant default, ícone `Info` do lucide) com o texto exato pedido pelo usuário sobre como funcionam as taxas.
 
-### 2. Criar `public/manifest.json`
-Conteúdo:
-```json
-{
-  "name": "PixelSafe — Cofre digital",
-  "short_name": "PixelSafe",
-  "description": "Proteja entregas e pagamentos dos seus projetos freelancer.",
-  "start_url": "/dashboard",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#0A0A0A",
-  "theme_color": "#0A0A0A",
-  "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/favicon.png",  "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ]
-}
-```
+### 4. Edge Function `create-payment`
+- Buscar `allowed_payment_methods` no SELECT do vault.
+- Se `=== 'pix'`, adicionar ao `preferenceBody`:
+  ```ts
+  payment_methods: {
+    excluded_payment_types: [
+      { id: "credit_card" },
+      { id: "ticket" },
+    ],
+  }
+  ```
+- Sem mudança quando `=== 'all'`.
 
-Observações:
-- `start_url: /dashboard` faz o app abrir direto na área logada (se não autenticado, sua rota já redireciona para `/login`).
-- `theme_color`/`background_color` em preto para casar com o tema dark da app.
-- `purpose: "any maskable"` cobre tanto launchers normais quanto Android com ícones adaptativos.
+### 5. Documentação `docs/TECH_SPEC.md`
+- Nova seção **Fase 14 — Trust & Transparency**:
+  - Coluna `vaults.allowed_payment_methods` (default `'all'`, valores `'pix' | 'all'`).
+  - Comportamento da `create-payment` com `excluded_payment_types`.
+  - Novo fluxo do `NewVaultDialog` (sem campo Status, com seletor de meio de pagamento e simulador).
+  - Microcopy de taxas no `MercadoPagoCard`.
+- Verificar/atualizar a seção da última implementação (Manifest PWA + ícones) — já está documentada; só revisar redação se necessário.
 
-### 3. Atualizar `index.html`
-Adicionar dentro do `<head>`:
-```html
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0A0A0A">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="PixelSafe">
-```
-O `<link rel="icon">` e `<link rel="apple-touch-icon">` atuais permanecem.
+### Detalhes técnicos
+- `RadioGroup` já existe em `src/components/ui/radio-group.tsx`.
+- `Alert` já existe em `src/components/ui/alert.tsx`.
+- Tipos do Supabase serão regenerados automaticamente após a migration; o código usa `allowed_payment_methods` no insert/select.
+- Cálculo do simulador: `fee = isActive ? 0 : Math.round(price * 0.029 * 100) / 100; net = price - fee` — consistente com a lógica já presente em `create-payment`.
+- Não mexer em outros arquivos (PayVault, Dashboard, etc.).
 
-### 4. O que NÃO será feito (intencional)
-- **Sem service worker** / sem `vite-plugin-pwa`. Motivo: causa cache antigo no preview do Lovable e no editor, atrapalhando desenvolvimento. Funcionalidade offline não é requisito do PixelSafe.
-- Sem ícones extras (16, 32, 48, 72…). O favicon.png escala bem em todos os contextos modernos; manter o set mínimo evita ruído.
-- Sem alterar `src/pages/Install.tsx` — as instruções atuais continuam válidas.
-
-### 5. Documentação
-Adicionar uma nota curta em `docs/TECH_SPEC.md` na seção de PWA/Mobile registrando que o app é "manifest-only installable" (sem SW) e o motivo.
-
-## Resultado esperado
-
-- **Android (Chrome)**: passa a aparecer prompt nativo "Instalar app"; uma vez instalado, abre em standalone (sem barra de URL), com ícone do escudo e tema preto.
-- **iPhone (Safari)**: continua funcionando via "Adicionar à Tela de Início" com o `apple-touch-icon` já configurado; agora também respeita título "PixelSafe" e status bar escura.
-- **Preview Lovable**: nenhum impacto — sem SW, sem cache persistente.
-
-## Arquivos afetados
-
-- `public/icon-192.png` (novo, gerado do 512)
-- `public/manifest.json` (novo)
-- `index.html` (adições no `<head>`)
-- `docs/TECH_SPEC.md` (nota curta)
+### Arquivos afetados
+- migration SQL (nova)
+- `src/components/NewVaultDialog.tsx`
+- `src/pages/Settings.tsx`
+- `supabase/functions/create-payment/index.ts`
+- `docs/TECH_SPEC.md`
