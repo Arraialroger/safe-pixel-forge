@@ -80,9 +80,18 @@ const schema = z.object({
       (v) => parseBRLToNumber(v) <= 9_999_999,
       "Valor muito alto."
     ),
-  status: z.enum(["pending", "paid"]),
+  allowed_payment_methods: z.enum(["pix", "all"]),
   notify_client: z.boolean().default(true),
 });
+
+function formatBRL(value: number) {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 type FormValues = z.infer<typeof schema>;
 
