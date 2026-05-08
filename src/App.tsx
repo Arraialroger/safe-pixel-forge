@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard.tsx";
 import Settings from "./pages/Settings.tsx";
 import Clients from "./pages/Clients.tsx";
 import PayVault from "./pages/PayVault.tsx";
+import Achievement from "./pages/Achievement.tsx";
 import AuthenticatedLayout from "./layouts/AuthenticatedLayout.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/install" element={<Install />} />
           <Route path="/pay/:slug" element={<PayVault />} />
+          <Route path="/conquista/:id" element={<Achievement />} />
           <Route element={<AuthenticatedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/clientes" element={<Clients />} />

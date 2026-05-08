@@ -582,3 +582,38 @@ O app é distribuído como **PWA manifest-only** (sem service worker), priorizan
 - `public/manifest.json` declara `name`, `short_name`, `start_url=/dashboard`, `display=standalone`, `theme_color/background_color = #0A0A0A` e dois ícones (`/icon-192.png` e `/favicon.png`, ambos `purpose: "any maskable"`).
 - `index.html` inclui `<link rel="manifest">`, `theme-color`, `mobile-web-app-capable`, `apple-mobile-web-app-*` e o `apple-touch-icon` apontando para o ícone com a marca PixelSafe.
 - Resultado: Android Chrome oferece "Instalar app" com ícone correto na home; iOS Safari usa "Adicionar à Tela de Início" via `apple-touch-icon`. Sem capacidade offline (intencional).
+
+## Fase 15 — Motor de Aquisição Viral (PLG)
+
+### `get-owner-branding` agora expõe `is_pro`
+- Inclui `subscription_status` no SELECT de `profiles` e retorna `is_pro: subscription_status === 'active'` no payload.
+- Retrocompatível: campos antigos preservados.
+- `usePublicOwnerBranding` consome a flag e expõe `isPro: boolean`.
+
+### Rodapé condicional no checkout (`PayVault.tsx`)
+- Novo componente `CheckoutFooter`:
+  - Owner não-Pro: "Receba seus pagamentos com segurança — PixelSafe" + CTA discreto "Você é freelancer? Crie sua conta grátis." → `/?ref=checkout_footer`.
+  - Owner Pro: apenas "Protegido por PixelSafe" (benefício white-label).
+
+### RPC `get_achievement_data(p_vault_id uuid)`
+- `SECURITY DEFINER`, `STABLE`, `search_path = public`.
+- Retorna **somente** `id`, `title`, `price`, `paid_at` (derivado de `vault_events`).
+- Filtro obrigatório `status = 'paid'` — nunca expõe cofres pendentes.
+- **Nunca** retorna `client_name`, `client_email`, `client_whatsapp`, `file_path` ou `owner_id`.
+- `GRANT EXECUTE` para `anon` e `authenticated`.
+
+### Rota pública `/conquista/:id` (`src/pages/Achievement.tsx`)
+- Fora do `AuthenticatedLayout`.
+- Consome `get_achievement_data` via `supabase.rpc(...)`.
+- UI mobile-first com troféu, valor recebido em destaque verde.
+- Ações: compartilhar no WhatsApp (texto pré-pronto) e copiar link.
+- CTA final PLG → `/?ref=achievement`.
+
+### E-mail rico ao owner (`mp-webhook` + `_shared/resend.ts`)
+- `sendResendEmail` ganhou `secondaryCtaLabel` / `secondaryCtaUrl` (botão outline).
+- Lógica de concorrência/travas inalterada — apenas HTML modificado.
+- E-mail de Pix recebido agora tem bloco verde escuro com "💰 Você recebeu R$ X,XX" e segundo CTA "Compartilhar conquista 🏆" → `${PUBLIC_APP_URL}/conquista/${vaultId}`.
+
+### Ajuste Zod (`NewVaultDialog.tsx`)
+- `price_masked`: valor mínimo R$ 0,50 (evita centavos zerados rejeitados pelo MP).
+- `allowed_payment_methods`: enum estrito sem `default` no schema (vem do `defaultValues`), com `required_error`.

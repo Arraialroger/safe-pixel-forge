@@ -98,9 +98,7 @@ export default function PayVault() {
         )}
       </div>
 
-      <p className="mt-6 text-center text-xs text-muted-foreground">
-        Protegido por PixelSafe
-      </p>
+      <CheckoutFooter ownerId={data?.owner_id ?? null} />
     </main>
   );
 }
@@ -377,6 +375,32 @@ function CheckoutHeader({ ownerId }: { ownerId: string | null }) {
         customLogoUrl={logoUrl}
         customLogoAlt={displayName ?? undefined}
       />
+    </div>
+  );
+}
+
+function CheckoutFooter({ ownerId }: { ownerId: string | null }) {
+  const { isPro } = usePublicOwnerBranding(ownerId);
+
+  if (isPro) {
+    return (
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        Protegido por PixelSafe
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-6 flex flex-col items-center gap-1.5 text-center">
+      <p className="text-xs text-muted-foreground">
+        Receba seus pagamentos com segurança — PixelSafe
+      </p>
+      <a
+        href="/?ref=checkout_footer"
+        className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+      >
+        Você é freelancer? Crie sua conta grátis.
+      </a>
     </div>
   );
 }

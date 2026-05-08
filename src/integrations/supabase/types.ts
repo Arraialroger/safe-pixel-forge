@@ -168,6 +168,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_achievement_data: {
+        Args: { p_vault_id: string }
+        Returns: {
+          id: string
+          paid_at: string
+          price: number
+          title: string
+        }[]
+      }
       get_public_vault_by_slug: {
         Args: { _slug: string }
         Returns: {

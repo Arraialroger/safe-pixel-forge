@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("custom_logo_url, full_name, email")
+      .select("custom_logo_url, full_name, email, subscription_status")
       .eq("id", parsed.data.owner_id)
       .maybeSingle();
 
@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
         custom_logo_url: data?.custom_logo_url ?? null,
         full_name: data?.full_name ?? null,
         email: data?.email ?? null,
+        is_pro: data?.subscription_status === "active",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

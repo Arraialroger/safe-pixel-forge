@@ -201,18 +201,23 @@ Deno.serve(async (req) => {
           to: ownerProfile.email,
           subject: `💸 Pix recebido: ${updated.title} (${priceStr})`,
           heading: greeting,
-          bodyHtml: `<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#4b5563;">
+          bodyHtml: `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#4b5563;">
               O pagamento do cofre <strong>${safeTitle}</strong> foi confirmado.
             </p>
+            <div style="background:#064e3b;color:#a7f3d0;padding:18px 20px;border-radius:10px;margin:0 0 20px;text-align:center;">
+              <p style="margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6ee7b7;">Você recebeu</p>
+              <p style="margin:6px 0 0;font-size:26px;font-weight:700;color:#ffffff;">💰 ${priceStr}</p>
+            </div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;padding:16px;margin:0 0 24px;">
               <tr><td style="font-size:13px;color:#4b5563;line-height:1.8;">
                 <strong>Cliente:</strong> ${safeClient}<br/>
-                <strong>Valor:</strong> ${priceStr}<br/>
                 <strong>Cofre:</strong> ${safeTitle}
               </td></tr>
             </table>`,
           ctaLabel: "Ver no Dashboard",
           ctaUrl: dashboardUrl,
+          secondaryCtaLabel: "Compartilhar conquista 🏆",
+          secondaryCtaUrl: `${PUBLIC_APP_URL}/conquista/${vaultId}`,
           footerNote: "Você receberá outro aviso quando o cliente baixar o arquivo.",
         });
         if (!result.ok) {

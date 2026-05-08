@@ -19,17 +19,30 @@ interface EmailLayoutOptions {
   bodyHtml: string; // HTML interno (já sanitizado pelo chamador)
   ctaLabel?: string;
   ctaUrl?: string;
+  secondaryCtaLabel?: string;
+  secondaryCtaUrl?: string;
   footerNote?: string;
 }
 
-function buildLayout({ heading, bodyHtml, ctaLabel, ctaUrl, footerNote }: EmailLayoutOptions): string {
+function buildLayout({ heading, bodyHtml, ctaLabel, ctaUrl, secondaryCtaLabel, secondaryCtaUrl, footerNote }: EmailLayoutOptions): string {
   const ctaBlock = ctaLabel && ctaUrl
-    ? `<p style="margin:0 0 24px;">
+    ? `<p style="margin:0 0 12px;">
         <a href="${ctaUrl}" style="display:inline-block;background:#0a0a0a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:600;">
           ${escapeHtml(ctaLabel)}
         </a>
-      </p>
-      <p style="margin:0 0 8px;font-size:12px;color:#9ca3af;">
+      </p>`
+    : "";
+
+  const secondaryCtaBlock = secondaryCtaLabel && secondaryCtaUrl
+    ? `<p style="margin:0 0 16px;">
+        <a href="${secondaryCtaUrl}" style="display:inline-block;background:#ffffff;color:#0a0a0a;text-decoration:none;padding:11px 19px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;font-weight:600;">
+          ${escapeHtml(secondaryCtaLabel)}
+        </a>
+      </p>`
+    : "";
+
+  const linkHelp = ctaUrl
+    ? `<p style="margin:0 0 8px;font-size:12px;color:#9ca3af;">
         Se o botão não funcionar, copie e cole este link no navegador:<br/>
         <span style="color:#6b7280;">${ctaUrl}</span>
       </p>`
@@ -50,6 +63,8 @@ function buildLayout({ heading, bodyHtml, ctaLabel, ctaUrl, footerNote }: EmailL
               <h1 style="margin:0 0 12px;font-size:20px;color:#0a0a0a;">${escapeHtml(heading)}</h1>
               ${bodyHtml}
               ${ctaBlock}
+              ${secondaryCtaBlock}
+              ${linkHelp}
               ${footerBlock}
             </td></tr>
           </table>
@@ -68,6 +83,8 @@ interface SendEmailParams {
   bodyHtml: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  secondaryCtaLabel?: string;
+  secondaryCtaUrl?: string;
   footerNote?: string;
 }
 
@@ -82,6 +99,8 @@ export async function sendResendEmail(params: SendEmailParams): Promise<{ ok: bo
     bodyHtml: params.bodyHtml,
     ctaLabel: params.ctaLabel,
     ctaUrl: params.ctaUrl,
+    secondaryCtaLabel: params.secondaryCtaLabel,
+    secondaryCtaUrl: params.secondaryCtaUrl,
     footerNote: params.footerNote,
   });
 
