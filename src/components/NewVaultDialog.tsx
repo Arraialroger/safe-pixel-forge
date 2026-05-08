@@ -75,12 +75,14 @@ const schema = z.object({
   price_masked: z
     .string()
     .min(1, "Informe o valor.")
-    .refine((v) => parseBRLToNumber(v) > 0, "Valor deve ser maior que zero.")
+    .refine((v) => parseBRLToNumber(v) >= 0.5, "Valor mínimo de R$ 0,50.")
     .refine(
       (v) => parseBRLToNumber(v) <= 9_999_999,
       "Valor muito alto."
     ),
-  allowed_payment_methods: z.enum(["pix", "all"]),
+  allowed_payment_methods: z.enum(["pix", "all"], {
+    required_error: "Escolha como você quer receber.",
+  }),
   notify_client: z.boolean().default(true),
 });
 
