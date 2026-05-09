@@ -617,3 +617,35 @@ O app é distribuído como **PWA manifest-only** (sem service worker), priorizan
 ### Ajuste Zod (`NewVaultDialog.tsx`)
 - `price_masked`: valor mínimo R$ 0,50 (evita centavos zerados rejeitados pelo MP).
 - `allowed_payment_methods`: enum estrito sem `default` no schema (vem do `defaultValues`), com `required_error`.
+
+## Fase 16 — Proteção Jurídica e Mini-CRM
+
+### Banco — `vault_events.metadata` (jsonb)
+- Nova coluna `metadata jsonb NOT NULL DEFAULT '{}'::jsonb` em `vault_events`.
+- Helper `_shared/events.ts` recebe `metadata?: Record<string, unknown>` opcional e o inclui no INSERT.
+- Novo `event_type`: `digital_signature_accepted`.
+
+### Comprovante de entrega — `get-download-url`
+- No primeiro download (vencedor da trava atômica `downloaded_at IS NULL`), além de gravar `downloaded`, grava `digital_signature_accepted` com:
+  - `ip` ← `x-forwarded-for` (primeiro item) → fallback `cf-connecting-ip` → `x-real-ip` → `"unknown"`
+  - `user_agent` ← header `user-agent`
+  - `timestamp` ← ISO do `downloaded_at`
+- A trava de concorrência e o e-mail ao owner permanecem inalterados.
+
+### UI
+- `VaultTimeline` lê `metadata` e renderiza um bloco "Comprovante de entrega" no topo com data, IP e User-Agent quando o evento existe.
+- `VaultCard` mostra um chip verde "Entrega assinada" quando `vault.downloaded_at` está presente (proxy do evento, sem N+1 queries).
+- `Vault` (em `src/data/mockVaults.ts`) ganhou `downloaded_at: string | null`.
+
+### Mini-CRM em `Clients.tsx`
+- Refatorado para `Accordion` (shadcn) — agregações 100% no frontend a partir de `useQuery(["vaults"])`.
+- Por cliente (chave `client_email` lowercase):
+  - **Total recebido**: soma `price` onde `status = 'paid'`.
+  - **Pendente**: soma `price` onde `status != 'paid'` (inclui expirados não pagos, marcados visualmente como "Expirado" via `isExpired(v)`).
+  - **Conversão**: `paidCount / totalCount` em %.
+- Cards exibem chips coloridos no header (Recebido / Pendente / Conversão) e expandem para listar todos os jobs do cliente.
+- **Ação rápida "Reenviar cobrança"** em cada cofre não-pago: copia `${origin}/pay/${slug}` para o clipboard e dispara toast (sem chamada de rede / e-mail).
+
+### Copy para designers
+- `NewVaultDialog`: label "Nome do projeto / job", placeholder "Ex.: Identidade Visual — Café Raízes", description "Crie um cofre para entregar o arquivo final do job e receber com segurança.", placeholder do cliente "Ex.: Marina Souza (Café Raízes)".
+- `EmptyVaults`: "Nenhum job no cofre ainda" / "Guarde o arquivo final do seu próximo job. O cliente recebe um link, paga e só então libera o download — sem dor de cabeça com cobrança."

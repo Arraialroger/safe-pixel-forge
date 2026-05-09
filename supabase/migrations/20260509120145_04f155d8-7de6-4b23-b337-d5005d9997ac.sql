@@ -1,0 +1,1 @@
+ALTER TABLE public.vault_events ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;

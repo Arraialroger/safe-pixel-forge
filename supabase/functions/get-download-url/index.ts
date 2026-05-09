@@ -76,6 +76,20 @@ Deno.serve(async (req) => {
       } else if (claimed) {
         // Ganhamos a corrida: registra evento de download e envia e-mail ao profissional.
         await recordVaultEvent(supabase, vault.id, "downloaded");
+
+        // Comprovante de entrega (assinatura digital): captura IP + User-Agent.
+        const xff = req.headers.get("x-forwarded-for") ?? "";
+        const ip =
+          xff.split(",")[0]?.trim() ||
+          req.headers.get("cf-connecting-ip") ||
+          req.headers.get("x-real-ip") ||
+          "unknown";
+        const userAgent = req.headers.get("user-agent") ?? "unknown";
+        await recordVaultEvent(supabase, vault.id, "digital_signature_accepted", {
+          ip,
+          user_agent: userAgent,
+          timestamp: nowIso,
+        });
         try {
           const { data: ownerProfile, error: profErr } = await supabase
             .from("profiles")

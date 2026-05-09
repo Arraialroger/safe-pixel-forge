@@ -323,7 +323,7 @@ export function NewVaultDialog() {
           <DialogHeader>
             <DialogTitle>Novo cofre</DialogTitle>
             <DialogDescription>
-              Crie um cofre para guardar a entrega e o pagamento de um projeto.
+              Crie um cofre para entregar o arquivo final do job e receber com segurança.
             </DialogDescription>
           </DialogHeader>
 
@@ -335,11 +335,11 @@ export function NewVaultDialog() {
               render={({ field }) => (
                 <FormItem className="space-y-1.5">
                   <FormLabel className="text-xs text-muted-foreground">
-                    Nome do projeto
+                    Nome do projeto / job
                   </FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Ex.: Logo Café Raíz"
+                      placeholder="Ex.: Identidade Visual — Café Raízes"
                       className="bg-background"
                       disabled={mutation.isPending}
                       {...field}
@@ -360,7 +360,7 @@ export function NewVaultDialog() {
                   </FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Ex.: Marina Souza"
+                      placeholder="Ex.: Marina Souza (Café Raízes)"
                       className="bg-background"
                       disabled={mutation.isPending}
                       {...field}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock, History as HistoryIcon } from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock, History as HistoryIcon, ShieldCheck } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Vault, formatBRL, statusLabel, isExpired, formatExpiryDate } from "@/data/mockVaults";
 import { isExpiringSoon, expiringLabel } from "@/utils/vault";
@@ -238,6 +238,13 @@ export function VaultCard({ vault }: VaultCardProps) {
       <p className="mb-2 text-xl font-semibold tracking-tight text-foreground">
         {formatBRL(Number(vault.price))}
       </p>
+
+      {vault.downloaded_at && (
+        <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+          <ShieldCheck className="h-3 w-3" strokeWidth={2.5} />
+          Entrega assinada
+        </p>
+      )}
 
       {vault.expires_at && (
         <p
