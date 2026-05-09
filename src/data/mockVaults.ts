@@ -15,6 +15,7 @@ export interface Vault {
   file_name: string | null;
   created_at: string;
   expires_at: string | null;
+  downloaded_at: string | null;
 }
 
 export function isExpired(vault: Pick<Vault, "expires_at">): boolean {
