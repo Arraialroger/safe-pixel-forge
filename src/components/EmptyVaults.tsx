@@ -8,10 +8,10 @@ export function EmptyVaults() {
         <Lock className="h-6 w-6 text-vault" strokeWidth={2.25} />
       </div>
       <h2 className="text-base font-semibold text-foreground">
-        Nenhum cofre ainda
+        Nenhum job no cofre ainda
       </h2>
       <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-        Crie seu primeiro cofre para guardar a entrega e o pagamento de um projeto. Seu cliente recebe um link e libera o arquivo após pagar.
+        Guarde o arquivo final do seu próximo job. O cliente recebe um link, paga e só então libera o download — sem dor de cabeça com cobrança.
       </p>
       <div className="mt-6">
         <NewVaultDialog />
