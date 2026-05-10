@@ -1,12 +1,20 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp } from "lucide-react";
+import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
@@ -18,6 +26,8 @@ import { formatBRPhone, onlyDigits } from "@/lib/phone";
 import { isExpired, formatBRL, statusLabel } from "@/data/mockVaults";
 import type { Vault } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
+
+type SortKey = "recent" | "revenue" | "conversion";
 
 interface ClientRow {
   email: string;
@@ -47,6 +57,8 @@ async function copyCheckoutLink(slug: string) {
 export default function Clients() {
   const { user, isReady } = useAuthReady();
   const [openItem, setOpenItem] = useState<string | undefined>(undefined);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("recent");
 
   const { data: vaults, isLoading, isError } = useQuery({
     queryKey: ["vaults", user?.id],
@@ -104,8 +116,40 @@ export default function Clients() {
     for (const c of arr) {
       c.conversionRate = c.totalCount > 0 ? c.paidCount / c.totalCount : 0;
     }
-    return arr.sort((a, b) => b.totalReceived - a.totalReceived || b.totalCount - a.totalCount);
+    return arr;
   }, [vaults]);
+
+  const filteredClients = useMemo<ClientRow[]>(() => {
+    const q = search.trim().toLowerCase();
+    const digits = q.replace(/\D/g, "");
+    const filtered = q
+      ? clients.filter((c) => {
+          const nameMatch = c.clientName.toLowerCase().includes(q);
+          const emailMatch = c.email.toLowerCase().includes(q);
+          const phoneMatch =
+            !!digits && !!c.clientWhatsapp && onlyDigits(c.clientWhatsapp).includes(digits);
+          return nameMatch || emailMatch || phoneMatch;
+        })
+      : clients.slice();
+
+    switch (sortBy) {
+      case "revenue":
+        filtered.sort(
+          (a, b) => b.totalReceived - a.totalReceived || b.totalCount - a.totalCount,
+        );
+        break;
+      case "conversion":
+        filtered.sort(
+          (a, b) => b.conversionRate - a.conversionRate || b.totalCount - a.totalCount,
+        );
+        break;
+      case "recent":
+      default:
+        filtered.sort((a, b) => (a.lastCreatedAt < b.lastCreatedAt ? 1 : -1));
+        break;
+    }
+    return filtered;
+  }, [clients, search, sortBy]);
 
   return (
     <div className="space-y-8">
@@ -145,15 +189,43 @@ export default function Clients() {
       )}
 
       {!isLoading && clients.length > 0 && (
-        <Accordion
-          type="single"
-          collapsible
-          value={openItem}
-          onValueChange={setOpenItem}
-          className="space-y-3"
-        >
-          {clients.map((c) => {
-            const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nome, e-mail ou WhatsApp"
+                className="pl-9"
+              />
+            </div>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Mais recentes</SelectItem>
+                <SelectItem value="revenue">Maior receita</SelectItem>
+                <SelectItem value="conversion">Maior conversão</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {filteredClients.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-border bg-card/40 px-6 py-10 text-center text-sm text-muted-foreground shadow-soft">
+              Nenhum cliente encontrado para “{search}”.
+            </p>
+          ) : (
+            <Accordion
+              type="single"
+              collapsible
+              value={openItem}
+              onValueChange={setOpenItem}
+              className="space-y-3"
+            >
+              {filteredClients.map((c) => {
+                const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
             const conversionPct = Math.round(c.conversionRate * 100);
             return (
               <AccordionItem
@@ -256,8 +328,10 @@ export default function Clients() {
                 </AccordionContent>
               </AccordionItem>
             );
-          })}
-        </Accordion>
+              })}
+            </Accordion>
+          )}
+        </>
       )}
     </div>
   );

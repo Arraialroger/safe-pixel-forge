@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Eye, ShoppingCart, CheckCircle2, Download, History, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, ShoppingCart, CheckCircle2, Download, History, Loader2, ShieldCheck, Copy } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 type VaultEventType =
   | "page_viewed"
@@ -21,6 +23,7 @@ interface VaultEvent {
 
 interface VaultTimelineProps {
   vaultId: string;
+  vaultTitle?: string;
 }
 
 const EVENT_META: Record<
@@ -59,7 +62,7 @@ const EVENT_META: Record<
   },
 };
 
-export function VaultTimeline({ vaultId }: VaultTimelineProps) {
+export function VaultTimeline({ vaultId, vaultTitle }: VaultTimelineProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["vault-events", vaultId],
     queryFn: async () => {
@@ -106,11 +109,44 @@ export function VaultTimeline({ vaultId }: VaultTimelineProps) {
     <div className="space-y-4">
       {signature && signature.metadata && (
         <section className="rounded-xl border border-success/40 bg-success/5 p-3">
-          <header className="mb-1.5 flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-success" strokeWidth={2.25} />
-            <h4 className="text-sm font-semibold text-foreground">
-              Comprovante de entrega
-            </h4>
+          <header className="mb-1.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-success" strokeWidth={2.25} />
+              <h4 className="text-sm font-semibold text-foreground">
+                Comprovante de entrega
+              </h4>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-success hover:bg-success/10 hover:text-success"
+              onClick={async () => {
+                const ua = signature.metadata?.user_agent ?? "";
+                const truncatedUa = ua.length > 80 ? ua.slice(0, 80) + "…" : ua;
+                const text =
+                  `🛡️ Comprovante de Entrega - PixelSafe\n` +
+                  `Projeto: ${vaultTitle ?? "—"}\n` +
+                  `Data e Hora: ${format(
+                    new Date(signature.created_at),
+                    "dd/MM/yyyy 'às' HH:mm:ss",
+                    { locale: ptBR },
+                  )}\n` +
+                  `Endereço IP: ${signature.metadata?.ip ?? "—"}\n` +
+                  `Dispositivo: ${truncatedUa || "—"}`;
+                try {
+                  await navigator.clipboard.writeText(text);
+                  toast.success("Comprovante copiado!", {
+                    description: "Cole no WhatsApp do cliente.",
+                  });
+                } catch {
+                  toast.error("Não foi possível copiar.");
+                }
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copiar
+            </Button>
           </header>
           <dl className="space-y-0.5 text-xs text-muted-foreground">
             <div>
