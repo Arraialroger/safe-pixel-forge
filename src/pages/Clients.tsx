@@ -209,8 +209,24 @@ export default function Clients() {
                 className="pl-9"
               />
             </div>
+            <ToggleGroup
+              type="single"
+              value={statusFilter}
+              onValueChange={(v) => v && setStatusFilter(v as StatusFilter)}
+              className="shrink-0"
+            >
+              <ToggleGroupItem value="all" aria-label="Todos" className="text-xs">
+                Todos
+              </ToggleGroupItem>
+              <ToggleGroupItem value="pending" aria-label="Inadimplentes" className="text-xs">
+                Inadimplentes
+              </ToggleGroupItem>
+              <ToggleGroupItem value="paid" aria-label="Pagos" className="text-xs">
+                Pagos
+              </ToggleGroupItem>
+            </ToggleGroup>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-              <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -220,6 +236,10 @@ export default function Clients() {
               </SelectContent>
             </Select>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            Exibindo {filteredClients.length} {filteredClients.length === 1 ? "cliente" : "clientes"}
+          </p>
 
           {filteredClients.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border bg-card/40 px-6 py-10 text-center text-sm text-muted-foreground shadow-soft">
