@@ -21,6 +21,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import { formatBRPhone, onlyDigits } from "@/lib/phone";
 import { isExpired, formatBRL, statusLabel } from "@/data/mockVaults";
@@ -28,6 +29,7 @@ import type { Vault } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
 
 type SortKey = "recent" | "revenue" | "conversion";
+type StatusFilter = "all" | "pending" | "paid";
 
 interface ClientRow {
   email: string;
