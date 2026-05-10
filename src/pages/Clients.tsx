@@ -57,6 +57,8 @@ async function copyCheckoutLink(slug: string) {
 export default function Clients() {
   const { user, isReady } = useAuthReady();
   const [openItem, setOpenItem] = useState<string | undefined>(undefined);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("recent");
 
   const { data: vaults, isLoading, isError } = useQuery({
     queryKey: ["vaults", user?.id],
