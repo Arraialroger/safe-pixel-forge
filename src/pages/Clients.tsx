@@ -328,8 +328,10 @@ export default function Clients() {
                 </AccordionContent>
               </AccordionItem>
             );
-          })}
-        </Accordion>
+              })}
+            </Accordion>
+          )}
+        </>
       )}
     </div>
   );
