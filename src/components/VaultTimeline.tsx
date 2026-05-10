@@ -62,7 +62,7 @@ const EVENT_META: Record<
   },
 };
 
-export function VaultTimeline({ vaultId }: VaultTimelineProps) {
+export function VaultTimeline({ vaultId, vaultTitle }: VaultTimelineProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["vault-events", vaultId],
     queryFn: async () => {
