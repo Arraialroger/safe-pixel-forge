@@ -125,7 +125,7 @@ export default function Clients() {
   const filteredClients = useMemo<ClientRow[]>(() => {
     const q = search.trim().toLowerCase();
     const digits = q.replace(/\D/g, "");
-    const filtered = q
+    let filtered = q
       ? clients.filter((c) => {
           const nameMatch = c.clientName.toLowerCase().includes(q);
           const emailMatch = c.email.toLowerCase().includes(q);
@@ -134,6 +134,12 @@ export default function Clients() {
           return nameMatch || emailMatch || phoneMatch;
         })
       : clients.slice();
+
+    if (statusFilter === "pending") {
+      filtered = filtered.filter((c) => c.totalPending > 0);
+    } else if (statusFilter === "paid") {
+      filtered = filtered.filter((c) => c.totalPending === 0 && c.totalReceived > 0);
+    }
 
     switch (sortBy) {
       case "revenue":
@@ -152,7 +158,7 @@ export default function Clients() {
         break;
     }
     return filtered;
-  }, [clients, search, sortBy]);
+  }, [clients, search, sortBy, statusFilter]);
 
   return (
     <div className="space-y-8">
