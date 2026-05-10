@@ -1,12 +1,20 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp } from "lucide-react";
+import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
@@ -18,6 +26,8 @@ import { formatBRPhone, onlyDigits } from "@/lib/phone";
 import { isExpired, formatBRL, statusLabel } from "@/data/mockVaults";
 import type { Vault } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
+
+type SortKey = "recent" | "revenue" | "conversion";
 
 interface ClientRow {
   email: string;
