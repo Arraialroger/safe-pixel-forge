@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Eye, ShoppingCart, CheckCircle2, Download, History, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, ShoppingCart, CheckCircle2, Download, History, Loader2, ShieldCheck, Copy } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 type VaultEventType =
   | "page_viewed"
