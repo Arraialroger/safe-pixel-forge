@@ -189,15 +189,43 @@ export default function Clients() {
       )}
 
       {!isLoading && clients.length > 0 && (
-        <Accordion
-          type="single"
-          collapsible
-          value={openItem}
-          onValueChange={setOpenItem}
-          className="space-y-3"
-        >
-          {clients.map((c) => {
-            const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nome, e-mail ou WhatsApp"
+                className="pl-9"
+              />
+            </div>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Mais recentes</SelectItem>
+                <SelectItem value="revenue">Maior receita</SelectItem>
+                <SelectItem value="conversion">Maior conversão</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {filteredClients.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-border bg-card/40 px-6 py-10 text-center text-sm text-muted-foreground shadow-soft">
+              Nenhum cliente encontrado para “{search}”.
+            </p>
+          ) : (
+            <Accordion
+              type="single"
+              collapsible
+              value={openItem}
+              onValueChange={setOpenItem}
+              className="space-y-3"
+            >
+              {filteredClients.map((c) => {
+                const digits = c.clientWhatsapp ? onlyDigits(c.clientWhatsapp) : "";
             const conversionPct = Math.round(c.conversionRate * 100);
             return (
               <AccordionItem
