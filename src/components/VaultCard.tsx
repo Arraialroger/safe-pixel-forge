@@ -333,7 +333,7 @@ export function VaultCard({ vault }: VaultCardProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2 max-h-[60vh] overflow-y-auto pr-1">
-            <VaultTimeline vaultId={vault.id} />
+            <VaultTimeline vaultId={vault.id} vaultTitle={vault.title} />
           </div>
         </DialogContent>
       </Dialog>
