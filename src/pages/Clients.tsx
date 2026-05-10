@@ -116,8 +116,40 @@ export default function Clients() {
     for (const c of arr) {
       c.conversionRate = c.totalCount > 0 ? c.paidCount / c.totalCount : 0;
     }
-    return arr.sort((a, b) => b.totalReceived - a.totalReceived || b.totalCount - a.totalCount);
+    return arr;
   }, [vaults]);
+
+  const filteredClients = useMemo<ClientRow[]>(() => {
+    const q = search.trim().toLowerCase();
+    const digits = q.replace(/\D/g, "");
+    const filtered = q
+      ? clients.filter((c) => {
+          const nameMatch = c.clientName.toLowerCase().includes(q);
+          const emailMatch = c.email.toLowerCase().includes(q);
+          const phoneMatch =
+            !!digits && !!c.clientWhatsapp && onlyDigits(c.clientWhatsapp).includes(digits);
+          return nameMatch || emailMatch || phoneMatch;
+        })
+      : clients.slice();
+
+    switch (sortBy) {
+      case "revenue":
+        filtered.sort(
+          (a, b) => b.totalReceived - a.totalReceived || b.totalCount - a.totalCount,
+        );
+        break;
+      case "conversion":
+        filtered.sort(
+          (a, b) => b.conversionRate - a.conversionRate || b.totalCount - a.totalCount,
+        );
+        break;
+      case "recent":
+      default:
+        filtered.sort((a, b) => (a.lastCreatedAt < b.lastCreatedAt ? 1 : -1));
+        break;
+    }
+    return filtered;
+  }, [clients, search, sortBy]);
 
   return (
     <div className="space-y-8">
