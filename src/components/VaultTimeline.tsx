@@ -23,6 +23,7 @@ interface VaultEvent {
 
 interface VaultTimelineProps {
   vaultId: string;
+  vaultTitle?: string;
 }
 
 const EVENT_META: Record<
