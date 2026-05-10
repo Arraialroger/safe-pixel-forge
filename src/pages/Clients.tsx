@@ -21,6 +21,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "sonner";
 import { formatBRPhone, onlyDigits } from "@/lib/phone";
 import { isExpired, formatBRL, statusLabel } from "@/data/mockVaults";
@@ -28,6 +29,7 @@ import type { Vault } from "@/data/mockVaults";
 import { cn } from "@/lib/utils";
 
 type SortKey = "recent" | "revenue" | "conversion";
+type StatusFilter = "all" | "pending" | "paid";
 
 interface ClientRow {
   email: string;
@@ -59,6 +61,7 @@ export default function Clients() {
   const [openItem, setOpenItem] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("recent");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const { data: vaults, isLoading, isError } = useQuery({
     queryKey: ["vaults", user?.id],
@@ -122,7 +125,7 @@ export default function Clients() {
   const filteredClients = useMemo<ClientRow[]>(() => {
     const q = search.trim().toLowerCase();
     const digits = q.replace(/\D/g, "");
-    const filtered = q
+    let filtered = q
       ? clients.filter((c) => {
           const nameMatch = c.clientName.toLowerCase().includes(q);
           const emailMatch = c.email.toLowerCase().includes(q);
@@ -131,6 +134,12 @@ export default function Clients() {
           return nameMatch || emailMatch || phoneMatch;
         })
       : clients.slice();
+
+    if (statusFilter === "pending") {
+      filtered = filtered.filter((c) => c.totalPending > 0);
+    } else if (statusFilter === "paid") {
+      filtered = filtered.filter((c) => c.totalPending === 0 && c.totalReceived > 0);
+    }
 
     switch (sortBy) {
       case "revenue":
@@ -149,7 +158,7 @@ export default function Clients() {
         break;
     }
     return filtered;
-  }, [clients, search, sortBy]);
+  }, [clients, search, sortBy, statusFilter]);
 
   return (
     <div className="space-y-8">
@@ -200,8 +209,24 @@ export default function Clients() {
                 className="pl-9"
               />
             </div>
+            <ToggleGroup
+              type="single"
+              value={statusFilter}
+              onValueChange={(v) => v && setStatusFilter(v as StatusFilter)}
+              className="shrink-0"
+            >
+              <ToggleGroupItem value="all" aria-label="Todos" className="text-xs">
+                Todos
+              </ToggleGroupItem>
+              <ToggleGroupItem value="pending" aria-label="Inadimplentes" className="text-xs">
+                Inadimplentes
+              </ToggleGroupItem>
+              <ToggleGroupItem value="paid" aria-label="Pagos" className="text-xs">
+                Pagos
+              </ToggleGroupItem>
+            </ToggleGroup>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-              <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -211,6 +236,10 @@ export default function Clients() {
               </SelectContent>
             </Select>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            Exibindo {filteredClients.length} {filteredClients.length === 1 ? "cliente" : "clientes"}
+          </p>
 
           {filteredClients.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border bg-card/40 px-6 py-10 text-center text-sm text-muted-foreground shadow-soft">
