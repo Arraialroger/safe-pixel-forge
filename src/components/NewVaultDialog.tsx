@@ -635,7 +635,7 @@ export function NewVaultDialog() {
                       Arraste um arquivo ou clique para selecionar
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      Até 50MB · qualquer formato
+                      Até {maxLabel} · qualquer formato
                     </p>
                   </div>
                   <input
