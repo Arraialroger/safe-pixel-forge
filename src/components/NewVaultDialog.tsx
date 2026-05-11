@@ -156,11 +156,11 @@ export function NewVaultDialog() {
     form.reset();
     setFile(null);
     setDragActive(false);
+    setUploadProgress(0);
   }
 
   function handleNewClick() {
-    const c = countQuery.data ?? 0;
-    if (c >= FREE_PLAN_LIMIT && !subscriptionActive) {
+    if (activeCount >= FREE_ACTIVE_LIMIT && !subscriptionActive) {
       setPaywallOpen(true);
       return;
     }
@@ -172,10 +172,12 @@ export function NewVaultDialog() {
       setFile(null);
       return;
     }
-    if (f.size > MAX_FILE_SIZE) {
+    if (f.size > maxBytes) {
       toast({
-        title: "Arquivo muito grande",
-        description: "O limite é de 50MB por arquivo.",
+        title: "Arquivo acima do limite",
+        description: subscriptionActive
+          ? "O limite por arquivo no Plano Pro é de 2GB."
+          : "O Plano PayGo permite até 500MB por arquivo. Faça upgrade para o Pro e envie até 2GB.",
         variant: "destructive",
       });
       return;
@@ -189,6 +191,48 @@ export function NewVaultDialog() {
     const f = e.dataTransfer.files?.[0] ?? null;
     handleFile(f);
   }
+
+  async function uploadFileResumable(f: File, objectPath: string) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    const projectUrl = import.meta.env.VITE_SUPABASE_URL as string;
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(f, {
+        endpoint: `${projectUrl}/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-upsert": "false",
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: "vault-files",
+          objectName: objectPath,
+          contentType: f.type || "application/octet-stream",
+          cacheControl: "3600",
+        },
+        chunkSize: 6 * 1024 * 1024,
+        onError: (err) => reject(err),
+        onProgress: (sent, total) => {
+          const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+          setUploadProgress(pct);
+        },
+        onSuccess: () => {
+          setUploadProgress(100);
+          resolve();
+        },
+      });
+
+      upload.findPreviousUploads().then((prev) => {
+        if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+        upload.start();
+      });
+    });
+  }
+
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
