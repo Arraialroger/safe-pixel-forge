@@ -44,8 +44,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatBRPhone, isValidBRPhone, normalizeBRPhone, onlyDigits } from "@/lib/phone";
 import { useNavigate } from "react-router-dom";
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const FREE_PLAN_LIMIT = 1;
+const MAX_FREE_FILE = 500 * 1024 * 1024; // 500MB
+const MAX_PRO_FILE = 2 * 1024 * 1024 * 1024; // 2GB
+const FREE_ACTIVE_LIMIT = 5;
+const ACTIVE_STATUSES = ["pending", "overdue"] as const;
 
 const schema = z.object({
   title: z
