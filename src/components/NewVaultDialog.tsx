@@ -238,15 +238,25 @@ export function NewVaultDialog() {
     mutationFn: async (values: FormValues) => {
       if (!user) throw new Error("Sessão expirada. Faça login novamente.");
 
-      // Defesa em profundidade: refaz a contagem antes do INSERT.
-      const { count: currentCount, error: countErr } = await supabase
+      // Defesa em profundidade: refaz a contagem de ATIVOS antes do INSERT.
+      const { count: currentActive, error: countErr } = await supabase
         .from("vaults")
         .select("id", { count: "exact", head: true })
-        .eq("owner_id", user.id);
+        .eq("owner_id", user.id)
+        .in("status", ACTIVE_STATUSES as unknown as string[]);
       if (countErr) throw countErr;
-      if ((currentCount ?? 0) >= FREE_PLAN_LIMIT && !subscriptionActive) {
+      if ((currentActive ?? 0) >= FREE_ACTIVE_LIMIT && !subscriptionActive) {
         throw new Error(
-          "Limite do plano gratuito atingido. Assine o Plano Pro para criar mais cofres.",
+          "Limite de 5 cofres ativos do plano PayGo atingido. Faça upgrade para o Plano Pro.",
+        );
+      }
+
+      // Revalida tamanho do arquivo conforme o plano.
+      if (file && file.size > maxBytes) {
+        throw new Error(
+          subscriptionActive
+            ? "Arquivo acima de 2GB."
+            : "Arquivo acima de 500MB. Faça upgrade para o Plano Pro.",
         );
       }
 
@@ -270,17 +280,17 @@ export function NewVaultDialog() {
         .single();
       if (insertErr) throw insertErr;
 
-      // 2. Upload file (if any)
+      // 2. Upload file (resumable via TUS) — suporta até 2GB com retomada automática.
       if (file) {
         const safeName = file.name.replace(/[^\w.\-]+/g, "_");
         const path = `${user.id}/${vault.id}/${safeName}`;
-        const { error: upErr } = await supabase.storage
-          .from("vault-files")
-          .upload(path, file, { upsert: false });
-        if (upErr) {
+        try {
+          setUploadProgress(0);
+          await uploadFileResumable(file, path);
+        } catch (upErr) {
           // rollback
           await supabase.from("vaults").delete().eq("id", vault.id);
-          throw upErr;
+          throw upErr instanceof Error ? upErr : new Error("Falha no upload do arquivo.");
         }
 
         // 3. Update vault with file refs
