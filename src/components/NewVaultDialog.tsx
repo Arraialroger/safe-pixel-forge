@@ -3,7 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, UploadCloud, FileText, X } from "lucide-react";
+import { Loader2, Plus, UploadCloud, FileText, X, Crown } from "lucide-react";
+import * as tus from "tus-js-client";
 import {
   Dialog,
   DialogContent,
