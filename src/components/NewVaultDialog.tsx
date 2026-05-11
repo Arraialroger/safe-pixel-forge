@@ -717,7 +717,11 @@ export function NewVaultDialog() {
                 {mutation.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Criar cofre
+                {mutation.isPending
+                  ? file
+                    ? `Enviando arquivo... ${uploadProgress}% — Não feche a página`
+                    : "Salvando..."
+                  : "Criar cofre"}
               </Button>
             </DialogFooter>
           </form>
