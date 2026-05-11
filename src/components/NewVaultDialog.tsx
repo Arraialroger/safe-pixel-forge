@@ -103,10 +103,24 @@ type FormValues = z.infer<typeof schema>;
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function NewVaultDialog() {
+  const { user } = useAuth();
+  const { isActive: subscriptionActive } = useSubscription();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const maxBytes = subscriptionActive ? MAX_PRO_FILE : MAX_FREE_FILE;
+  const maxLabel = subscriptionActive ? "2GB" : "500MB";
   const { user } = useAuth();
   const { isActive: subscriptionActive } = useSubscription();
   const navigate = useNavigate();
