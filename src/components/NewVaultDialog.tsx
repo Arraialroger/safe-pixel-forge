@@ -671,6 +671,9 @@ export function NewVaultDialog() {
                   </button>
                 </div>
               )}
+              <p className="text-[11px] text-muted-foreground">
+                💡 Dica: Precisa enviar vários arquivos do projeto? Compacte tudo em um único arquivo .ZIP e envie aqui.
+              </p>
             </div>
 
             <FormField
