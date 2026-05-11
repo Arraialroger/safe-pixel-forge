@@ -63,6 +63,14 @@ export default function Clients() {
   const [sortBy, setSortBy] = useState<SortKey>("recent");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
+  const hasActiveFilters = search !== "" || sortBy !== "recent" || statusFilter !== "all";
+
+  function clearFilters() {
+    setSearch("");
+    setSortBy("recent");
+    setStatusFilter("all");
+  }
+
   const { data: vaults, isLoading, isError } = useQuery({
     queryKey: ["vaults", user?.id],
     enabled: isReady && !!user?.id,
