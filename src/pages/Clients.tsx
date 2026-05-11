@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp, Search } from "lucide-react";
+import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp, Search, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +62,14 @@ export default function Clients() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("recent");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const hasActiveFilters = search !== "" || sortBy !== "recent" || statusFilter !== "all";
+
+  function clearFilters() {
+    setSearch("");
+    setSortBy("recent");
+    setStatusFilter("all");
+  }
 
   const { data: vaults, isLoading, isError } = useQuery({
     queryKey: ["vaults", user?.id],
@@ -235,6 +243,17 @@ export default function Clients() {
                 <SelectItem value="conversion">Maior conversão</SelectItem>
               </SelectContent>
             </Select>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="shrink-0 gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Limpar filtros
+              </Button>
+            )}
           </div>
 
           <p className="text-sm text-muted-foreground">
