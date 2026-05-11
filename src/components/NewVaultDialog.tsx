@@ -121,28 +121,22 @@ export function NewVaultDialog() {
 
   const maxBytes = subscriptionActive ? MAX_PRO_FILE : MAX_FREE_FILE;
   const maxLabel = subscriptionActive ? "2GB" : "500MB";
-  const { user } = useAuth();
-  const { isActive: subscriptionActive } = useSubscription();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [paywallOpen, setPaywallOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [dragActive, setDragActive] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const countQuery = useQuery({
-    queryKey: ["vaults-count", user?.id],
+  const activeCountQuery = useQuery({
+    queryKey: ["vaults-active-count", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const { count, error } = await supabase
         .from("vaults")
         .select("id", { count: "exact", head: true })
-        .eq("owner_id", user!.id);
+        .eq("owner_id", user!.id)
+        .in("status", ACTIVE_STATUSES as unknown as string[]);
       if (error) throw error;
       return count ?? 0;
     },
   });
+
+  const activeCount = activeCountQuery.data ?? 0;
+  const showScarcity = !subscriptionActive && activeCount >= 3;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
