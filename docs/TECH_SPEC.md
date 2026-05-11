@@ -649,3 +649,53 @@ O app é distribuído como **PWA manifest-only** (sem service worker), priorizan
 ### Copy para designers
 - `NewVaultDialog`: label "Nome do projeto / job", placeholder "Ex.: Identidade Visual — Café Raízes", description "Crie um cofre para entregar o arquivo final do job e receber com segurança.", placeholder do cliente "Ex.: Marina Souza (Café Raízes)".
 - `EmptyVaults`: "Nenhum job no cofre ainda" / "Guarde o arquivo final do seu próximo job. O cliente recebe um link, paga e só então libera o download — sem dor de cabeça com cobrança."
+
+## Fase 17 — Catraca de Monetização e Upload Resumable (TUS)
+
+Blindagem do modelo de negócio (PayGo vs Pro) e migração do upload para um motor que aguenta arquivos grandes de verdade.
+
+### Trava de cofres ativos (paywall)
+- **"Cofre ativo"** = `status IN ('pending', 'overdue')`. Cofres `paid` não contam para o limite — incentivam o usuário a fechar ciclos em vez de pagar Pro só para acumular cofres pagos abertos.
+- **PayGo (`!isActive`)**: máximo de **5 cofres ativos simultâneos** (`FREE_ACTIVE_LIMIT = 5`).
+- **Pro (`isActive`)**: ilimitado.
+- Implementado em `src/components/NewVaultDialog.tsx` via `useQuery(["vaults-active-count", user.id])` (count exato, head-only).
+- **Defesa em profundidade**: o `mutationFn` refaz a contagem de ativos imediatamente antes do `INSERT` para evitar race conditions entre abas/dispositivos.
+- **Paywall**: `AlertDialog` com ícone `Crown` âmbar, título "Limite do Plano PayGo atingido" e CTA primário "Conhecer Plano Pro" → `navigate("/configuracoes")`.
+
+### Gatilho de escassez no botão "Novo Cofre"
+- Quando `!isActive && activeCount >= 3`, o botão renderiza um badge `{activeCount}/5`:
+  - `3 ou 4` ativos → badge âmbar (alerta).
+  - `5` ativos → badge vermelho (limite atingido); o clique abre direto o paywall.
+- Cria urgência visual sem ser intrusivo.
+
+### Limites de tamanho de arquivo
+- **PayGo**: até **500MB** por arquivo (`MAX_FREE_FILE`).
+- **Pro**: até **2GB** por arquivo (`MAX_PRO_FILE`).
+- Validação no `handleFile` (drop + click) e revalidação no `mutationFn` antes do upload. Toast de erro contextual ao plano sugere upgrade para usuários PayGo.
+- O texto da dropzone exibe dinamicamente `Até {maxLabel} · qualquer formato`.
+- `formatBytes` agora suporta GB.
+
+### Upload resumable via TUS
+- Dependência: **`tus-js-client`** (instalada via `bun add`).
+- O `supabase.storage.from("vault-files").upload(...)` (single-shot, ~50MB hard cap no client JS) foi substituído por upload TUS direto contra `${VITE_SUPABASE_URL}/storage/v1/upload/resumable`.
+- Configuração:
+  - `chunkSize: 6 * 1024 * 1024` (6MB) — recomendação oficial do Supabase.
+  - `retryDelays: [0, 3000, 5000, 10000, 20000]` — retry exponencial.
+  - `headers.authorization: Bearer <access_token>` (do `supabase.auth.getSession()`); `x-upsert: false`.
+  - `metadata`: `bucketName`, `objectName`, `contentType`, `cacheControl`.
+  - `findPreviousUploads` + `resumeFromPreviousUpload` → retoma uploads interrompidos automaticamente.
+- O bucket `vault-files` continua privado; a RLS atual (`storage.objects` por `${user.id}/...`) cobre o caminho `${user.id}/${vault.id}/${safeName}`.
+- Em caso de falha no upload, o cofre recém-criado é apagado (rollback existente preservado).
+
+### UX de carregamento
+- Estado `uploadProgress: number` alimentado pelo callback `onProgress` do TUS (`Math.round(sent/total*100)`).
+- Durante `mutation.isPending` com `file` presente, o botão "Criar cofre" fica `disabled`, mostra `Loader2 animate-spin` e o label vira **"Enviando arquivo... {uploadProgress}% — Não feche a página"**.
+- Sem arquivo (cofre só com cobrança), o label vira "Salvando...".
+- O `Dialog` permanece bloqueado para fechamento enquanto `isPending` (guard em `onOpenChange`).
+
+### Microcopy "ZIP" (UX para múltiplos arquivos)
+- Logo abaixo da dropzone: dica discreta `text-[11px] text-muted-foreground` orientando o usuário a compactar múltiplos arquivos em um único `.ZIP`. Solução de baixo custo para o caso "preciso enviar 30 PSDs".
+
+### Arquivos tocados na Fase 17
+- `src/components/NewVaultDialog.tsx` — toda a lógica de paywall, badge de escassez, limites de tamanho, TUS, progresso e microcopy.
+- `package.json` — adiciona `tus-js-client` e `@types/tus-js-client`.

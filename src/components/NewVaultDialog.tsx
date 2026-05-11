@@ -3,7 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, UploadCloud, FileText, X } from "lucide-react";
+import { Loader2, Plus, UploadCloud, FileText, X, Crown } from "lucide-react";
+import * as tus from "tus-js-client";
 import {
   Dialog,
   DialogContent,
@@ -43,8 +44,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatBRPhone, isValidBRPhone, normalizeBRPhone, onlyDigits } from "@/lib/phone";
 import { useNavigate } from "react-router-dom";
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const FREE_PLAN_LIMIT = 1;
+const MAX_FREE_FILE = 500 * 1024 * 1024; // 500MB
+const MAX_PRO_FILE = 2 * 1024 * 1024 * 1024; // 2GB
+const FREE_ACTIVE_LIMIT = 5;
+const ACTIVE_STATUSES = ["pending", "overdue"] as const;
 
 const schema = z.object({
   title: z
@@ -100,7 +103,8 @@ type FormValues = z.infer<typeof schema>;
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function NewVaultDialog() {
@@ -112,20 +116,27 @@ export function NewVaultDialog() {
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const countQuery = useQuery({
-    queryKey: ["vaults-count", user?.id],
+  const maxBytes = subscriptionActive ? MAX_PRO_FILE : MAX_FREE_FILE;
+  const maxLabel = subscriptionActive ? "2GB" : "500MB";
+  const activeCountQuery = useQuery({
+    queryKey: ["vaults-active-count", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const { count, error } = await supabase
         .from("vaults")
         .select("id", { count: "exact", head: true })
-        .eq("owner_id", user!.id);
+        .eq("owner_id", user!.id)
+        .in("status", ACTIVE_STATUSES as unknown as string[]);
       if (error) throw error;
       return count ?? 0;
     },
   });
+
+  const activeCount = activeCountQuery.data ?? 0;
+  const showScarcity = !subscriptionActive && activeCount >= 3;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -145,11 +156,11 @@ export function NewVaultDialog() {
     form.reset();
     setFile(null);
     setDragActive(false);
+    setUploadProgress(0);
   }
 
   function handleNewClick() {
-    const c = countQuery.data ?? 0;
-    if (c >= FREE_PLAN_LIMIT && !subscriptionActive) {
+    if (activeCount >= FREE_ACTIVE_LIMIT && !subscriptionActive) {
       setPaywallOpen(true);
       return;
     }
@@ -161,10 +172,12 @@ export function NewVaultDialog() {
       setFile(null);
       return;
     }
-    if (f.size > MAX_FILE_SIZE) {
+    if (f.size > maxBytes) {
       toast({
-        title: "Arquivo muito grande",
-        description: "O limite é de 50MB por arquivo.",
+        title: "Arquivo acima do limite",
+        description: subscriptionActive
+          ? "O limite por arquivo no Plano Pro é de 2GB."
+          : "O Plano PayGo permite até 500MB por arquivo. Faça upgrade para o Pro e envie até 2GB.",
         variant: "destructive",
       });
       return;
@@ -179,19 +192,71 @@ export function NewVaultDialog() {
     handleFile(f);
   }
 
+  async function uploadFileResumable(f: File, objectPath: string) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    const projectUrl = import.meta.env.VITE_SUPABASE_URL as string;
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(f, {
+        endpoint: `${projectUrl}/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-upsert": "false",
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: "vault-files",
+          objectName: objectPath,
+          contentType: f.type || "application/octet-stream",
+          cacheControl: "3600",
+        },
+        chunkSize: 6 * 1024 * 1024,
+        onError: (err) => reject(err),
+        onProgress: (sent, total) => {
+          const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+          setUploadProgress(pct);
+        },
+        onSuccess: () => {
+          setUploadProgress(100);
+          resolve();
+        },
+      });
+
+      upload.findPreviousUploads().then((prev) => {
+        if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+        upload.start();
+      });
+    });
+  }
+
+
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
       if (!user) throw new Error("Sessão expirada. Faça login novamente.");
 
-      // Defesa em profundidade: refaz a contagem antes do INSERT.
-      const { count: currentCount, error: countErr } = await supabase
+      // Defesa em profundidade: refaz a contagem de ATIVOS antes do INSERT.
+      const { count: currentActive, error: countErr } = await supabase
         .from("vaults")
         .select("id", { count: "exact", head: true })
-        .eq("owner_id", user.id);
+        .eq("owner_id", user.id)
+        .in("status", ACTIVE_STATUSES as unknown as string[]);
       if (countErr) throw countErr;
-      if ((currentCount ?? 0) >= FREE_PLAN_LIMIT && !subscriptionActive) {
+      if ((currentActive ?? 0) >= FREE_ACTIVE_LIMIT && !subscriptionActive) {
         throw new Error(
-          "Limite do plano gratuito atingido. Assine o Plano Pro para criar mais cofres.",
+          "Limite de 5 cofres ativos do plano PayGo atingido. Faça upgrade para o Plano Pro.",
+        );
+      }
+
+      // Revalida tamanho do arquivo conforme o plano.
+      if (file && file.size > maxBytes) {
+        throw new Error(
+          subscriptionActive
+            ? "Arquivo acima de 2GB."
+            : "Arquivo acima de 500MB. Faça upgrade para o Plano Pro.",
         );
       }
 
@@ -215,17 +280,17 @@ export function NewVaultDialog() {
         .single();
       if (insertErr) throw insertErr;
 
-      // 2. Upload file (if any)
+      // 2. Upload file (resumable via TUS) — suporta até 2GB com retomada automática.
       if (file) {
         const safeName = file.name.replace(/[^\w.\-]+/g, "_");
         const path = `${user.id}/${vault.id}/${safeName}`;
-        const { error: upErr } = await supabase.storage
-          .from("vault-files")
-          .upload(path, file, { upsert: false });
-        if (upErr) {
+        try {
+          setUploadProgress(0);
+          await uploadFileResumable(file, path);
+        } catch (upErr) {
           // rollback
           await supabase.from("vaults").delete().eq("id", vault.id);
-          throw upErr;
+          throw upErr instanceof Error ? upErr : new Error("Falha no upload do arquivo.");
         }
 
         // 3. Update vault with file refs
@@ -254,7 +319,7 @@ export function NewVaultDialog() {
     },
     onSuccess: ({ emailError }) => {
       queryClient.invalidateQueries({ queryKey: ["vaults"] });
-      queryClient.invalidateQueries({ queryKey: ["vaults-count", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["vaults-active-count", user?.id] });
       if (emailError) {
         toast({
           title: "Cofre criado",
@@ -284,28 +349,53 @@ export function NewVaultDialog() {
 
   return (
     <>
-      <Button onClick={handleNewClick} className="w-full sm:w-auto">
+      <Button onClick={handleNewClick} className="relative w-full sm:w-auto">
         <Plus className="mr-1.5 h-4 w-4" />
         Novo Cofre
+        {showScarcity && (
+          <span
+            className={cn(
+              "ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+              activeCount >= FREE_ACTIVE_LIMIT
+                ? "bg-destructive/20 text-destructive-foreground"
+                : "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+            )}
+            aria-label={`${activeCount} de ${FREE_ACTIVE_LIMIT} cofres ativos do plano PayGo`}
+          >
+            {activeCount}/{FREE_ACTIVE_LIMIT}
+          </span>
+        )}
       </Button>
 
       <AlertDialog open={paywallOpen} onOpenChange={setPaywallOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Limite do plano gratuito atingido</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você já utilizou o seu cofre gratuito. Assine o Plano Pro (R$ 39/mês)
-              para criar cofres ilimitados e continuar recebendo pagamentos com segurança.
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
+              <Crown className="h-6 w-6" strokeWidth={2.25} />
+            </div>
+            <AlertDialogTitle className="text-center">
+              Limite do Plano PayGo atingido
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Você atingiu o limite de 5 entregas ativas simultâneas do plano gratuito.
+              Faça o upgrade para o PixelSafe Pro e crie cofres ilimitados, além de zerar a taxa de transação.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="sm:justify-center">
+            <Button
+              variant="ghost"
+              onClick={() => setPaywallOpen(false)}
+            >
+              Agora não
+            </Button>
             <AlertDialogAction
               onClick={() => {
                 setPaywallOpen(false);
                 navigate("/configuracoes");
               }}
             >
-              Assinar agora
+              <Crown className="mr-1.5 h-4 w-4" />
+              Conhecer Plano Pro
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -545,7 +635,7 @@ export function NewVaultDialog() {
                       Arraste um arquivo ou clique para selecionar
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      Até 50MB · qualquer formato
+                      Até {maxLabel} · qualquer formato
                     </p>
                   </div>
                   <input
@@ -581,6 +671,9 @@ export function NewVaultDialog() {
                   </button>
                 </div>
               )}
+              <p className="text-[11px] text-muted-foreground">
+                💡 Dica: Precisa enviar vários arquivos do projeto? Compacte tudo em um único arquivo .ZIP e envie aqui.
+              </p>
             </div>
 
             <FormField
@@ -624,7 +717,11 @@ export function NewVaultDialog() {
                 {mutation.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Criar cofre
+                {mutation.isPending
+                  ? file
+                    ? `Enviando arquivo... ${uploadProgress}% — Não feche a página`
+                    : "Salvando..."
+                  : "Criar cofre"}
               </Button>
             </DialogFooter>
           </form>
