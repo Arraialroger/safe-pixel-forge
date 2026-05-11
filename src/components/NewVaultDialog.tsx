@@ -349,28 +349,53 @@ export function NewVaultDialog() {
 
   return (
     <>
-      <Button onClick={handleNewClick} className="w-full sm:w-auto">
+      <Button onClick={handleNewClick} className="relative w-full sm:w-auto">
         <Plus className="mr-1.5 h-4 w-4" />
         Novo Cofre
+        {showScarcity && (
+          <span
+            className={cn(
+              "ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+              activeCount >= FREE_ACTIVE_LIMIT
+                ? "bg-destructive/20 text-destructive-foreground"
+                : "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+            )}
+            aria-label={`${activeCount} de ${FREE_ACTIVE_LIMIT} cofres ativos do plano PayGo`}
+          >
+            {activeCount}/{FREE_ACTIVE_LIMIT}
+          </span>
+        )}
       </Button>
 
       <AlertDialog open={paywallOpen} onOpenChange={setPaywallOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Limite do plano gratuito atingido</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você já utilizou o seu cofre gratuito. Assine o Plano Pro (R$ 39/mês)
-              para criar cofres ilimitados e continuar recebendo pagamentos com segurança.
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
+              <Crown className="h-6 w-6" strokeWidth={2.25} />
+            </div>
+            <AlertDialogTitle className="text-center">
+              Limite do Plano PayGo atingido
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Você atingiu o limite de 5 entregas ativas simultâneas do plano gratuito.
+              Faça o upgrade para o PixelSafe Pro e crie cofres ilimitados, além de zerar a taxa de transação.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="sm:justify-center">
+            <Button
+              variant="ghost"
+              onClick={() => setPaywallOpen(false)}
+            >
+              Agora não
+            </Button>
             <AlertDialogAction
               onClick={() => {
                 setPaywallOpen(false);
                 navigate("/configuracoes");
               }}
             >
-              Assinar agora
+              <Crown className="mr-1.5 h-4 w-4" />
+              Conhecer Plano Pro
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
