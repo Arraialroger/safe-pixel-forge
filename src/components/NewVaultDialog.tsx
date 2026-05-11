@@ -319,7 +319,7 @@ export function NewVaultDialog() {
     },
     onSuccess: ({ emailError }) => {
       queryClient.invalidateQueries({ queryKey: ["vaults"] });
-      queryClient.invalidateQueries({ queryKey: ["vaults-count", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["vaults-active-count", user?.id] });
       if (emailError) {
         toast({
           title: "Cofre criado",
