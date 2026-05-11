@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp, Search } from "lucide-react";
+import { Users, MessageCircle, Link2, ChevronDown, Wallet, Clock, TrendingUp, Search, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { supabase } from "@/integrations/supabase/client";
