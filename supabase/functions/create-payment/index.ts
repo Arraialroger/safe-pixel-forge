@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${workspace.mp_access_token}`,
+          Authorization: `Bearer ${mpAccessToken}`,
         },
         body: JSON.stringify(preferenceBody),
       },
