@@ -136,31 +136,54 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_secrets: {
+        Row: {
+          mp_access_token: string | null
+          mp_refresh_token: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          mp_access_token?: string | null
+          mp_refresh_token?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          mp_access_token?: string | null
+          mp_refresh_token?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_secrets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspaces: {
         Row: {
           created_at: string
           id: string
-          mp_access_token: string | null
           mp_public_key: string | null
-          mp_refresh_token: string | null
           mp_user_id: string | null
           owner_id: string
         }
         Insert: {
           created_at?: string
           id?: string
-          mp_access_token?: string | null
           mp_public_key?: string | null
-          mp_refresh_token?: string | null
           mp_user_id?: string | null
           owner_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          mp_access_token?: string | null
           mp_public_key?: string | null
-          mp_refresh_token?: string | null
           mp_user_id?: string | null
           owner_id?: string
         }

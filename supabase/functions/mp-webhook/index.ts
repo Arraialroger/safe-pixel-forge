@@ -83,19 +83,31 @@ Deno.serve(async (req) => {
 
     const { data: workspace, error: wsErr } = await supabase
       .from("workspaces")
-      .select("mp_access_token")
+      .select("id")
       .eq("owner_id", vaultRow.owner_id)
       .maybeSingle();
 
-    if (wsErr || !workspace?.mp_access_token) {
-      console.error("mp-webhook: missing access token for owner", vaultRow.owner_id, wsErr);
+    if (wsErr || !workspace) {
+      console.error("mp-webhook: workspace lookup error", vaultRow.owner_id, wsErr);
       return ok();
     }
+
+    const { data: secrets, error: secErr } = await supabase
+      .from("workspace_secrets")
+      .select("mp_access_token")
+      .eq("workspace_id", workspace.id)
+      .maybeSingle();
+
+    if (secErr || !secrets?.mp_access_token) {
+      console.error("mp-webhook: missing access token for owner", vaultRow.owner_id, secErr);
+      return ok();
+    }
+    const mpAccessToken = secrets.mp_access_token;
 
     const mpRes = await fetch(
       `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
       {
-        headers: { Authorization: `Bearer ${workspace.mp_access_token}` },
+        headers: { Authorization: `Bearer ${mpAccessToken}` },
       },
     );
 
