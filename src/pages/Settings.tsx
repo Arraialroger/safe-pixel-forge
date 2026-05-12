@@ -400,7 +400,7 @@ function MercadoPagoCard({ userId }: { userId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workspaces")
-        .select("mp_access_token, mp_user_id")
+        .select("mp_user_id")
         .eq("owner_id", userId)
         .maybeSingle();
       if (error) throw error;
