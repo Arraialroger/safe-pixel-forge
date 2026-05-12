@@ -47,20 +47,32 @@ Deno.serve(async (req) => {
 
     const { data: workspace, error: wsErr } = await supabase
       .from("workspaces")
-      .select("mp_access_token")
+      .select("id")
       .eq("owner_id", vault.owner_id)
       .maybeSingle();
 
-    if (wsErr) {
+    if (wsErr || !workspace) {
       console.error("workspace lookup error", wsErr);
       return json({ error: "Erro ao buscar credenciais do vendedor" }, 500);
     }
-    if (!workspace?.mp_access_token) {
+
+    const { data: secrets, error: secErr } = await supabase
+      .from("workspace_secrets")
+      .select("mp_access_token")
+      .eq("workspace_id", workspace.id)
+      .maybeSingle();
+
+    if (secErr) {
+      console.error("workspace_secrets lookup error", secErr);
+      return json({ error: "Erro ao buscar credenciais do vendedor" }, 500);
+    }
+    if (!secrets?.mp_access_token) {
       return json(
         { error: "Vendedor ainda não conectou o Mercado Pago." },
         400,
       );
     }
+    const mpAccessToken = secrets.mp_access_token;
 
     // ===== Split dinâmico =====
     // Se o dono do cofre tem assinatura ativa (Plano Pro Asaas) → marketplace_fee = 0.
