@@ -94,10 +94,36 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- Sweep 2: delete stale drafts (>1h, no file uploaded) ---
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data: staleDrafts, error: draftErr } = await supabase
+      .from("vaults")
+      .select("id")
+      .eq("status", "draft")
+      .is("file_path", null)
+      .lt("created_at", oneHourAgo);
+
+    let draftsDeleted = 0;
+    if (draftErr) {
+      console.error("Stale drafts query error:", draftErr);
+    } else if (staleDrafts && staleDrafts.length > 0) {
+      const ids = staleDrafts.map((v) => v.id);
+      const { error: delErr } = await supabase
+        .from("vaults")
+        .delete()
+        .in("id", ids);
+      if (delErr) {
+        console.error("Stale drafts delete error:", delErr);
+      } else {
+        draftsDeleted = ids.length;
+      }
+    }
+
     return new Response(
       JSON.stringify({
         cleaned_vaults: cleaned,
         scanned: expired?.length ?? 0,
+        drafts_deleted: draftsDeleted,
         failures,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
