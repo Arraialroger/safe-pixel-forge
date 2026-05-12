@@ -62,18 +62,34 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { error: updErr } = await admin
+    // Atualiza dados não-sensíveis no workspace e recupera o id.
+    const { data: ws, error: updErr } = await admin
       .from("workspaces")
       .update({
-        mp_access_token: access_token,
-        mp_refresh_token: refresh_token ?? null,
         mp_public_key: public_key ?? null,
         mp_user_id: user_id,
       })
-      .eq("owner_id", state);
+      .eq("owner_id", state)
+      .select("id")
+      .maybeSingle();
 
-    if (updErr) {
+    if (updErr || !ws) {
       console.error("workspace update error", updErr);
+      return Response.redirect(redirectFail, 302);
+    }
+
+    // Grava tokens sensíveis na tabela segregada (RLS bloqueia o frontend).
+    const { error: secErr } = await admin
+      .from("workspace_secrets")
+      .upsert({
+        workspace_id: ws.id,
+        mp_access_token: access_token,
+        mp_refresh_token: refresh_token ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "workspace_id" });
+
+    if (secErr) {
+      console.error("workspace_secrets upsert error", secErr);
       return Response.redirect(redirectFail, 302);
     }
 
