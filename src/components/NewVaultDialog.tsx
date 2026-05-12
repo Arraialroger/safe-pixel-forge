@@ -262,7 +262,7 @@ export function NewVaultDialog() {
 
       const price = parseBRLToNumber(values.price_masked);
 
-      // 1. Insert vault
+      // 1. Insert vault as DRAFT (does not count against the 5-active limit).
       const whatsapp = values.client_whatsapp ? normalizeBRPhone(values.client_whatsapp) : "";
       const clientEmail = values.client_email.trim();
       const { data: vault, error: insertErr } = await supabase
@@ -275,30 +275,45 @@ export function NewVaultDialog() {
           price,
           allowed_payment_methods: values.allowed_payment_methods,
           owner_id: user.id,
+          status: "draft",
         })
         .select()
         .single();
       if (insertErr) throw insertErr;
 
       // 2. Upload file (resumable via TUS) — suporta até 2GB com retomada automática.
+      let filePath: string | null = null;
       if (file) {
         const safeName = file.name.replace(/[^\w.\-]+/g, "_");
         const path = `${user.id}/${vault.id}/${safeName}`;
         try {
           setUploadProgress(0);
           await uploadFileResumable(file, path);
+          filePath = path;
         } catch (upErr) {
-          // rollback
+          // rollback do draft órfão
           await supabase.from("vaults").delete().eq("id", vault.id);
           throw upErr instanceof Error ? upErr : new Error("Falha no upload do arquivo.");
         }
+      }
 
-        // 3. Update vault with file refs
-        const { error: updErr } = await supabase
-          .from("vaults")
-          .update({ file_path: path, file_name: file.name })
-          .eq("id", vault.id);
-        if (updErr) throw updErr;
+      // 3. Promove de draft -> pending (e grava refs do arquivo, se houver).
+      //    O trigger no banco revalida o limite de 5 cofres ativos do PayGo.
+      const { error: updErr } = await supabase
+        .from("vaults")
+        .update({
+          status: "pending",
+          file_path: filePath,
+          file_name: file ? file.name : null,
+        })
+        .eq("id", vault.id);
+      if (updErr) {
+        // Limite atingido no momento da promoção — limpa draft + arquivo órfão.
+        if (filePath) {
+          await supabase.storage.from("vault-files").remove([filePath]);
+        }
+        await supabase.from("vaults").delete().eq("id", vault.id);
+        throw updErr;
       }
 
       // 4. Optional: dispara e-mail inicial. NÃO falha o cofre se o e-mail falhar.
