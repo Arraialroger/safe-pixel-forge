@@ -435,7 +435,7 @@ function MercadoPagoCard({ userId }: { userId: string }) {
   }, []);
 
   const isLoading = workspaceQuery.isLoading;
-  const isConnected = !!workspaceQuery.data?.mp_access_token;
+  const isConnected = !!workspaceQuery.data?.mp_user_id;
   const mpUserId = workspaceQuery.data?.mp_user_id ?? null;
 
   function handleConnect() {
