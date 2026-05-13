@@ -1,35 +1,10 @@
 import { useState } from "react";
-import {
-  Link2,
-  Check,
-  MoreHorizontal,
-  Trash2,
-  Loader2,
-  MessageCircle,
-  Mail,
-  CalendarClock,
-  History as HistoryIcon,
-  ShieldCheck,
-  User,
-  Clock,
-} from "lucide-react";
+import { Lock, Link2, Check, MoreHorizontal, Trash2, Loader2, MessageCircle, Mail, CalendarClock, History as HistoryIcon, ShieldCheck } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Vault,
-  formatBRL,
-  statusLabel,
-  isExpired,
-  formatExpiryDate,
-} from "@/data/mockVaults";
+import { Vault, formatBRL, statusLabel, isExpired, formatExpiryDate } from "@/data/mockVaults";
 import { isExpiringSoon, expiringLabel } from "@/utils/vault";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,13 +81,11 @@ export function VaultCard({ vault }: VaultCardProps) {
 
   const resendMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke(
-        "resend-vault-email",
-        {
-          body: { vault_id: vault.id },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("resend-vault-email", {
+        body: { vault_id: vault.id },
+      });
       if (error) {
+        // Tenta extrair a mensagem do corpo retornado pela edge function.
         const ctx = (error as { context?: Response }).context;
         if (ctx && typeof ctx.json === "function") {
           try {
@@ -151,13 +124,11 @@ export function VaultCard({ vault }: VaultCardProps) {
           .from("vault-files")
           .remove([vault.file_path]);
         if (storageErr) {
+          // best-effort: continue with row delete even if storage fails
           console.warn("Falha ao remover arquivo do storage:", storageErr);
         }
       }
-      const { error } = await supabase
-        .from("vaults")
-        .delete()
-        .eq("id", vault.id);
+      const { error } = await supabase.from("vaults").delete().eq("id", vault.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -177,135 +148,124 @@ export function VaultCard({ vault }: VaultCardProps) {
     },
   });
 
-  const statusText = expired
-    ? "Expirado"
-    : expiringSoon
-      ? urgencyLabel ?? "Expirando"
-      : statusLabel(vault.status);
-
   return (
-    <Card className="group overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-all duration-200 hover:border-muted-foreground/30 hover:bg-accent/30 hover:shadow-soft-lg">
-      {/* Header: Badge + Menu */}
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-5 pb-0">
-        <span
+    <article className="group rounded-2xl border border-border bg-card p-5 shadow-soft transition-all duration-200 hover:border-muted-foreground/30 hover:bg-accent/30 hover:shadow-soft-lg">
+      <header className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+            <Lock className="h-4 w-4 text-vault" strokeWidth={2.25} />
+          </span>
+          <h3 className="truncate text-sm font-semibold leading-tight text-foreground">
+            {vault.title}
+          </h3>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+              expired
+                ? "bg-destructive/15 text-destructive"
+                : isPaid
+                  ? "bg-success/15 text-success"
+                  : expiringSoon
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                    : "bg-primary/15 text-primary",
+            )}
+          >
+            {expired
+              ? "Expirado"
+              : expiringSoon
+                ? urgencyLabel ?? "Expirando"
+                : statusLabel(vault.status)}
+          </span>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label="Ações do cofre"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (!resendMutation.isPending && !expired) resendMutation.mutate();
+                }}
+                disabled={resendMutation.isPending || expired}
+              >
+                {resendMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
+                Reenviar e-mail
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setHistoryOpen(true);
+                }}
+              >
+                <HistoryIcon className="mr-2 h-4 w-4" />
+                Ver histórico
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setConfirmOpen(true);
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Excluir cofre
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      <p className="mb-3 text-xs text-muted-foreground">
+        Cliente · <span className="text-foreground/80">{vault.client_name}</span>
+      </p>
+
+      <p className="mb-2 text-xl font-semibold tracking-tight text-foreground">
+        {formatBRL(Number(vault.price))}
+      </p>
+
+      {vault.downloaded_at && (
+        <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+          <ShieldCheck className="h-3 w-3" strokeWidth={2.5} />
+          Entrega assinada
+        </p>
+      )}
+
+      {vault.expires_at && (
+        <p
           className={cn(
-            "rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+            "mb-4 flex items-center gap-1.5 text-[11px]",
             expired
-              ? "bg-destructive/15 text-destructive"
-              : isPaid
-                ? "bg-success/15 text-success"
-                : expiringSoon
-                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                  : "bg-primary/15 text-primary"
+              ? "text-destructive"
+              : expiringSoon
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-muted-foreground",
           )}
         >
-          {statusText}
-        </span>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              aria-label="Ações do cofre"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                if (!resendMutation.isPending && !expired)
-                  resendMutation.mutate();
-              }}
-              disabled={resendMutation.isPending || expired}
-            >
-              {resendMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Mail className="mr-2 h-4 w-4" />
-              )}
-              Reenviar e-mail
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                setHistoryOpen(true);
-              }}
-            >
-              <HistoryIcon className="mr-2 h-4 w-4" />
-              Ver histórico
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                setConfirmOpen(true);
-              }}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Excluir cofre
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CardHeader>
-
-      {/* Título e Cliente */}
-      <CardContent className="space-y-1 p-5 pt-3">
-        <h3 className="text-lg font-semibold leading-snug text-foreground line-clamp-2">
-          {vault.title}
-        </h3>
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <User className="h-3.5 w-3.5" strokeWidth={2} />
-          <span className="truncate">{vault.client_name}</span>
+          <CalendarClock className="h-3 w-3" />
+          {expired ? "Expirou em " : "Expira em "}
+          {formatExpiryDate(vault.expires_at)}
         </p>
+      )}
 
-        {/* Bloco Financeiro */}
-        <div className="mt-4 space-y-1.5">
-          <p className="text-2xl font-bold tracking-tight text-foreground">
-            {formatBRL(Number(vault.price))}
-          </p>
-
-          {vault.downloaded_at && (
-            <p className="inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-              <ShieldCheck className="h-3 w-3" strokeWidth={2.5} />
-              Entrega assinada
-            </p>
-          )}
-
-          {vault.expires_at && (
-            <p
-              className={cn(
-                "flex items-center gap-1.5 text-xs",
-                expired
-                  ? "text-destructive"
-                  : expiringSoon
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-muted-foreground"
-              )}
-            >
-              <CalendarClock className="h-3.5 w-3.5" />
-              {expired ? "Expirou em " : "Expira em "}
-              {formatExpiryDate(vault.expires_at)}
-            </p>
-          )}
-
-          {!vault.expires_at && vault.created_at && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              Criado em {formatExpiryDate(vault.created_at)}
-            </p>
-          )}
-        </div>
-      </CardContent>
-
-      {/* Rodapé de Ações */}
-      <CardFooter className="grid grid-cols-[1fr_auto] gap-2 border-t border-border/60 px-5 py-4">
+      <div className="grid grid-cols-[1fr_auto] gap-2">
         <Button
-          variant="secondary"
+          variant="outline"
           size="sm"
           onClick={handleCopy}
           disabled={expired}
@@ -320,28 +280,24 @@ export function VaultCard({ vault }: VaultCardProps) {
         </Button>
 
         <Button
+          variant="outline"
           size="sm"
           onClick={handleWhatsApp}
           disabled={expired}
           aria-label="Compartilhar via WhatsApp"
           title="Compartilhar via WhatsApp"
-          className="bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 px-3"
+          className="px-2.5 text-success hover:text-success"
         >
-          <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
+          <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.25} />
         </Button>
-      </CardFooter>
+      </div>
 
-      {/* Dialogs */}
-      <AlertDialog
-        open={confirmOpen}
-        onOpenChange={(o) => !deleteMutation.isPending && setConfirmOpen(o)}
-      >
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => !deleteMutation.isPending && setConfirmOpen(o)}>
         <AlertDialogContent className="bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir este cofre?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O arquivo vinculado também será
-              removido do storage.
+              Esta ação não pode ser desfeita. O arquivo vinculado também será removido do storage.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -381,6 +337,6 @@ export function VaultCard({ vault }: VaultCardProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </Card>
+    </article>
   );
 }
