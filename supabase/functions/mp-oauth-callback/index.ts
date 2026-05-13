@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state"); // auth.uid() do dono
+  const state = url.searchParams.get("state"); // nonce de oauth_states
   const errorParam = url.searchParams.get("error");
 
   const appUrl =
@@ -25,6 +25,36 @@ Deno.serve(async (req) => {
     const clientSecret = Deno.env.get("MP_CLIENT_SECRET")!;
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const redirectUri = `${supabaseUrl}/functions/v1/mp-oauth-callback`;
+
+    const admin = createClient(
+      supabaseUrl,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // 1) Valida e consome o nonce (uso único, anti-CSRF).
+    // UUID v4 sanity check para evitar erros de cast no .eq().
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(state)) {
+      console.warn("mp-oauth-callback: state not a uuid");
+      return Response.redirect(redirectFail, 302);
+    }
+
+    const { data: stateRow, error: stateErr } = await admin
+      .from("oauth_states")
+      .delete()
+      .eq("nonce", state)
+      .select("owner_id, expires_at")
+      .maybeSingle();
+
+    if (stateErr || !stateRow) {
+      console.warn("mp-oauth-callback: invalid/used state", stateErr);
+      return Response.redirect(redirectFail, 302);
+    }
+    if (new Date(stateRow.expires_at).getTime() < Date.now()) {
+      console.warn("mp-oauth-callback: state expired");
+      return Response.redirect(redirectFail, 302);
+    }
+    const ownerId = stateRow.owner_id as string;
 
     const tokenRes = await fetch("https://api.mercadopago.com/oauth/token", {
       method: "POST",
