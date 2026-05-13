@@ -699,3 +699,39 @@ Blindagem do modelo de negócio (PayGo vs Pro) e migração do upload para um mo
 ### Arquivos tocados na Fase 17
 - `src/components/NewVaultDialog.tsx` — toda a lógica de paywall, badge de escassez, limites de tamanho, TUS, progresso e microcopy.
 - `package.json` — adiciona `tus-js-client` e `@types/tus-js-client`.
+
+---
+
+## Fase 18 — PR 3: Segurança Final do GTM (CSRF + HMAC)
+
+### Crítico #1 — Anti-CSRF no OAuth do Mercado Pago
+- Tabela `public.oauth_states (nonce uuid PK, owner_id uuid → auth.users, expires_at timestamptz default now()+15min)` com RLS `USING(false)` — só service-role escreve/lê.
+- Edge Function nova **`mp-oauth-init`** (`verify_jwt = true`):
+  - Resolve `auth.uid()` a partir do JWT do header.
+  - `INSERT INTO oauth_states (owner_id) RETURNING nonce`.
+  - Devolve `{ authUrl }` montada server-side com `state=<nonce>` (UUID opaco). `MP_CLIENT_ID` deixa de viver no client.
+- `Settings.tsx#handleConnect` agora chama `supabase.functions.invoke("mp-oauth-init")` e redireciona. Sem `VITE_MP_CLIENT_ID` no fluxo.
+- **`mp-oauth-callback`** valida o `state`:
+  - Sanity UUID regex.
+  - `DELETE ... RETURNING owner_id, expires_at` (uso único, atômico).
+  - Falha se ausente, expirado ou já consumido → redirect `mp_connected=false`.
+  - Usa `owner_id` do nonce para gravar `workspaces` e `workspace_secrets`.
+
+### Crítico #4 — Validação HMAC SHA-256 do webhook MP
+- Novo secret obrigatório: **`MP_WEBHOOK_SECRET`** (chave do painel MP).
+- `mp-webhook` agora:
+  - Lê `x-signature` (`ts=...,v1=...`) e `x-request-id`.
+  - Pega `data.id` da query string (param padrão MP).
+  - Manifest: `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`
+  - `HMAC-SHA256(MP_WEBHOOK_SECRET, manifest)` em hex via `crypto.subtle`.
+  - **Comparação timing-safe** (XOR byte-a-byte).
+  - Mismatch / headers ausentes → `403 Forbidden`. Sem secret → `503` (fail-closed).
+- Mantém o restante do fluxo (lookup vault, consulta MP API, marca `paid`, envia emails).
+
+### Arquivos tocados na Fase 18
+- `supabase/migrations/*` — `oauth_states` + RLS.
+- `supabase/functions/mp-oauth-init/index.ts` — novo.
+- `supabase/functions/mp-oauth-callback/index.ts` — consome nonce.
+- `supabase/functions/mp-webhook/index.ts` — HMAC SHA-256 timing-safe.
+- `supabase/config.toml` — registra `mp-oauth-init` (`verify_jwt = true`).
+- `src/pages/Settings.tsx` — `handleConnect` via Edge Function.
