@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          nonce: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          nonce?: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          nonce?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           asaas_customer_id: string | null
