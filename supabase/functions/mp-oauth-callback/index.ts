@@ -87,11 +87,6 @@ Deno.serve(async (req) => {
       return Response.redirect(redirectFail, 302);
     }
 
-    const admin = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
     // Atualiza dados não-sensíveis no workspace do owner identificado pelo nonce.
     const { data: ws, error: updErr } = await admin
       .from("workspaces")
