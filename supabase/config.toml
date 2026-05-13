@@ -33,6 +33,10 @@ verify_jwt = false
 [functions.mp-oauth-callback]
 verify_jwt = false
 
+[functions.mp-oauth-init]
+verify_jwt = true
+
+
 [functions.cancel-subscription]
 verify_jwt = true
 
