@@ -438,26 +438,17 @@ function MercadoPagoCard({ userId }: { userId: string }) {
   const isConnected = !!workspaceQuery.data?.mp_user_id;
   const mpUserId = workspaceQuery.data?.mp_user_id ?? null;
 
-  function handleConnect() {
-    const clientId = import.meta.env.VITE_MP_CLIENT_ID as string | undefined;
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    if (!clientId) {
+  async function handleConnect() {
+    const { data, error } = await supabase.functions.invoke("mp-oauth-init");
+    if (error || !data?.authUrl) {
       toast({
-        title: "Configuração ausente",
-        description: "VITE_MP_CLIENT_ID não está definido.",
+        title: "Erro ao conectar",
+        description: "Não foi possível iniciar a conexão com o Mercado Pago. Tente novamente.",
         variant: "destructive",
       });
       return;
     }
-    const redirectUri = `${supabaseUrl}/functions/v1/mp-oauth-callback`;
-    const authUrl =
-      `https://auth.mercadopago.com.br/authorization` +
-      `?client_id=${encodeURIComponent(clientId)}` +
-      `&response_type=code` +
-      `&platform_id=mp` +
-      `&state=${encodeURIComponent(userId)}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}`;
-    window.location.href = authUrl;
+    window.location.href = data.authUrl as string;
   }
 
   return (
