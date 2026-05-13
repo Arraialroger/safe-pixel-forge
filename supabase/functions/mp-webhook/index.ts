@@ -24,13 +24,77 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const vaultId = url.searchParams.get("vault_id");
+    // MP envia `data.id` na query string padrão (além do body). Usado no manifest HMAC.
+    const dataIdFromQuery = url.searchParams.get("data.id") ?? url.searchParams.get("id");
+    const xSignature = req.headers.get("x-signature") ?? "";
+    const xRequestId = req.headers.get("x-request-id") ?? "";
 
+    // Lê o corpo cru — precisamos dele tanto para JSON quanto, eventualmente, para logs.
+    const rawBody = await req.text();
     let body: Record<string, unknown> = {};
     try {
-      const raw = await req.text();
-      if (raw) body = JSON.parse(raw);
+      if (rawBody) body = JSON.parse(rawBody);
     } catch (_e) {
       body = {};
+    }
+
+    // ----- Validação HMAC SHA-256 (Mercado Pago) -----
+    // Manifest: id:<data.id>;request-id:<x-request-id>;ts:<ts>;
+    // Header: x-signature: ts=<ts>,v1=<hash>
+    const webhookSecret = Deno.env.get("MP_WEBHOOK_SECRET");
+    if (!webhookSecret) {
+      console.error("mp-webhook: MP_WEBHOOK_SECRET not configured (fail-closed)");
+      return new Response("misconfigured", { status: 503 });
+    }
+
+    const sigParts = Object.fromEntries(
+      xSignature.split(",").map((p) => {
+        const [k, ...rest] = p.trim().split("=");
+        return [k, rest.join("=")];
+      }),
+    ) as Record<string, string>;
+    const ts = sigParts.ts;
+    const v1 = sigParts.v1;
+
+    const dataFromBody = body.data as { id?: string | number } | undefined;
+    const manifestDataId = dataIdFromQuery ?? (dataFromBody?.id ? String(dataFromBody.id) : "");
+
+    if (!ts || !v1 || !xRequestId || !manifestDataId) {
+      console.warn("mp-webhook: missing signature inputs", {
+        hasTs: !!ts, hasV1: !!v1, hasReqId: !!xRequestId, hasDataId: !!manifestDataId,
+      });
+      return new Response("forbidden", { status: 403 });
+    }
+
+    const manifest = `id:${manifestDataId};request-id:${xRequestId};ts:${ts};`;
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(webhookSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sigBuf = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(manifest),
+    );
+    const expectedHex = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Comparação timing-safe.
+    if (expectedHex.length !== v1.length) {
+      console.warn("mp-webhook: signature length mismatch");
+      return new Response("forbidden", { status: 403 });
+    }
+    let diff = 0;
+    for (let i = 0; i < expectedHex.length; i++) {
+      diff |= expectedHex.charCodeAt(i) ^ v1.charCodeAt(i);
+    }
+    if (diff !== 0) {
+      console.warn("mp-webhook: HMAC mismatch");
+      return new Response("forbidden", { status: 403 });
     }
 
     if (!vaultId) {
@@ -50,12 +114,7 @@ Deno.serve(async (req) => {
       return ok();
     }
 
-    const data = body.data as { id?: string | number } | undefined;
-    const paymentId = data?.id ? String(data.id) : null;
-    if (!paymentId) {
-      console.warn("mp-webhook: payment notification without data.id", vaultId);
-      return ok();
-    }
+    const paymentId = manifestDataId;
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
