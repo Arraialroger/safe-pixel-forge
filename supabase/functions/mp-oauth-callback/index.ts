@@ -92,14 +92,14 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Atualiza dados não-sensíveis no workspace e recupera o id.
+    // Atualiza dados não-sensíveis no workspace do owner identificado pelo nonce.
     const { data: ws, error: updErr } = await admin
       .from("workspaces")
       .update({
         mp_public_key: public_key ?? null,
         mp_user_id: user_id,
       })
-      .eq("owner_id", state)
+      .eq("owner_id", ownerId)
       .select("id")
       .maybeSingle();
 
