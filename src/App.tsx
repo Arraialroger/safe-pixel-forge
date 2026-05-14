@@ -35,6 +35,7 @@ const App = () => (
           <Route path="/conquista/:id" element={<Achievement />} />
           <Route element={<AuthenticatedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/cofres" element={<Vaults />} />
             <Route path="/clientes" element={<Clients />} />
             <Route path="/configuracoes" element={<Settings />} />
           </Route>
