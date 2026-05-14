@@ -1,61 +1,83 @@
-## Ajustes Finos da Fase 16
 
-Duas melhorias de UX, 100% frontend, sem mudanças de schema, edge functions ou queries.
+# Fase 18 — Central de Gestão de Cofres
 
-### 1. Botão "Copiar Comprovante" no `VaultTimeline.tsx`
+## 1. Nova página `src/pages/Vaults.tsx` (rota `/cofres`)
 
-No bloco verde do `digital_signature_accepted` (já existente), adicionar um botão discreto (ghost, `size="sm"`, ícone `Copy` da `lucide-react`) no canto superior direito do header da seção.
+Layout de **lista de alta densidade**, largura total, com header (título + botão `NewVaultDialog`) e `StatsCards` no topo.
 
-Para construir o texto, preciso do nome do projeto (`vault.title`), que hoje **não chega ao componente**. Solução: estender as props de `VaultTimeline` para aceitar `vaultTitle?: string` (opcional, fallback para "—") e passar a prop nos call-sites (procuro com `rg "VaultTimeline"` na hora; provável uso em `Dashboard.tsx`/`VaultCard.tsx`).
+### Linha da lista (desktop ≥ md)
 
-Ao clicar:
-- Monta o texto:
-  ```
-  🛡️ Comprovante de Entrega - PixelSafe
-  Projeto: {vaultTitle}
-  Data e Hora: {format(created_at, "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}
-  Endereço IP: {metadata.ip ?? "—"}
-  Dispositivo: {truncate(metadata.user_agent, 80)}
-  ```
-- `await navigator.clipboard.writeText(...)` com try/catch.
-- Sucesso → `toast.success("Comprovante copiado!", { description: "Cole no WhatsApp do cliente." })` (sonner, padrão já usado no projeto).
-- Falha → `toast.error("Não foi possível copiar.")`.
+Grid em 7 colunas com altura compacta (~64px), divisórias `border-b border-border`, hover sutil:
 
-Linhas omitidas do user_agent são truncadas com helper local (`s.length > 80 ? s.slice(0,80) + "…" : s`).
-
-### 2. Busca + Ordenação no `Clients.tsx`
-
-Adicionar uma barra superior (acima do `<Accordion>`) com layout responsivo (`flex flex-col sm:flex-row gap-2`):
-
-- **Input de busca** (`@/components/ui/input`, ícone `Search` à esquerda, placeholder "Buscar por nome, e-mail ou WhatsApp"). Estado: `const [search, setSearch] = useState("")`.
-- **Select de ordenação** (`@/components/ui/select`, largura ~200px). Estado: `const [sortBy, setSortBy] = useState<"recent" | "revenue" | "conversion">("recent")`. Opções:
-  - `recent` → "Mais recentes" (padrão, ordena por `lastCreatedAt` desc — comportamento atual de fato é por receita; trocaremos o default para `lastCreatedAt`)
-  - `revenue` → "Maior receita" (`totalReceived` desc)
-  - `conversion` → "Maior conversão" (`conversionRate` desc, desempate por `totalCount` desc)
-
-Refatorar o `useMemo` atual: a agregação continua igual, mas o `.sort(...)` final passa a depender de `sortBy`. Adicionar um segundo `useMemo` derivado (`filteredClients`) que aplica o filtro:
-
-```ts
-const q = search.trim().toLowerCase();
-if (!q) return clients;
-const digits = q.replace(/\D/g, "");
-return clients.filter(c =>
-  c.clientName.toLowerCase().includes(q) ||
-  c.email.toLowerCase().includes(q) ||
-  (digits && c.clientWhatsapp && onlyDigits(c.clientWhatsapp).includes(digits))
-);
+```text
+[Status badge] [Job + Cliente] [R$ valor] [Criado em] [Expira em] [Assinatura] [Ações]
 ```
 
-Renderizar a partir de `filteredClients`. Quando vazio com busca ativa, mostrar estado vazio leve ("Nenhum cliente encontrado para '{search}'.").
+- **Status**: badge semântico — Pago (success), Pendente (primary), Expirado (destructive), Expirando (amber). Reaproveita lógica de `isExpired` / `isExpiringSoon`.
+- **Job/Projeto**: `font-semibold text-sm` na primeira linha; **Cliente** em `text-xs text-muted-foreground` abaixo.
+- **Financeiro**: `formatBRL(price)`, `font-semibold tabular-nums`.
+- **Datas**: `created_at` e `expires_at` formatados em pt-BR, `text-xs text-muted-foreground`.
+- **Assinatura Digital**: se `vault_events` tiver `digital_signature_accepted`, mostra badge `ShieldCheck` "Entrega assinada · IP xxx.xxx.xxx.xxx" (lê `metadata.ip`).
+- **Ações** (à direita, `flex gap-1.5`, sem dropdown):
+  - `Histórico` (HistoryIcon) — abre `Dialog` com `VaultTimeline`
+  - `Reenviar` (Mail) — `resend-vault-email`
+  - `WhatsApp` (MessageCircle, verde) — abre `wa.me`
+  - `Copiar link` (Link2 / Check após copiar) — `/pay/:slug`
+  - `Excluir` (Trash2, ghost destructive) — `AlertDialog` de confirmação
+  - Todos: `Button variant="ghost" size="sm"` com `Icon` + `<span class="text-xs">label</span>`. Desabilitados quando `expired` (exceto Histórico/Excluir).
 
-### Out of scope (explicitamente)
+### Mobile (< md)
 
-- Não alteramos schema, edge functions, RLS, nem `useQuery`.
-- Sem botões de mock/simulação.
-- Sem mudanças no header já existente do bloco de comprovante além do botão.
+A lista vira **cards verticais empilhados** (mesmos dados, sem dropdown):
+- Topo: status + job + cliente
+- Meio: valor + datas + badge de assinatura
+- Base: grid 2 colunas com TODOS os botões de ação visíveis (ícone + texto curto)
 
-### Arquivos tocados
+### Dados
 
-- `src/components/VaultTimeline.tsx` (nova prop + botão copiar)
-- Call-sites de `VaultTimeline` (passar `vaultTitle`) — identificados em build via `rg`
-- `src/pages/Clients.tsx` (barra de busca/sort + memos)
+- `useQuery(["vaults", uid])` igual ao Dashboard atual.
+- Para a coluna de assinatura: `useQuery(["vault-signatures", uid])` que faz `select("vault_id, metadata").eq("event_type","digital_signature_accepted")` filtrado por vaults do owner. Mapa `vaultId → { ip }` consumido pela linha.
+- Estados: `isLoading` → skeleton de linhas (8 placeholders); `isError` → mensagem; vazio → reaproveita `EmptyVaults`.
+
+## 2. Dashboard enxuto (`src/pages/Dashboard.tsx`)
+
+Remove a grid de `VaultCard`. Mantém:
+1. Header (título + `NewVaultDialog`)
+2. `StatsCards` (já existe)
+3. **CTA grande**: card destacado com `Button` "Ver todos os cofres" → `navigate("/cofres")`
+4. **Cofres recentes** (últimos 3): lista minimalista de 3 linhas (status badge · título · cliente · valor · link "abrir histórico"). Sem cards grandes. Link "ver todos" no rodapé do bloco.
+
+`EmptyVaults` continua aparecendo quando `vaults.length === 0`.
+
+## 3. Roteamento e navegação
+
+- `src/App.tsx`: adiciona `<Route path="/cofres" element={<Vaults />} />` dentro do `AuthenticatedLayout`.
+- `src/components/AppSidebar.tsx`: insere item **Cofres** (ícone `Lock` ou `Archive`) entre Dashboard e Clientes.
+
+## 4. Reutilização
+
+- `VaultCard.tsx` permanece (usado pelo bloco "Recentes" do Dashboard? — **não**: criamos um `VaultRecentItem` minimalista inline ou pequeno componente em `src/components/VaultRecentItem.tsx` para evitar reuso do card grande).
+- Lógica de mutações (`resend`, `delete`, `copy`, `whatsapp`) será extraída para um hook compartilhado `src/hooks/useVaultActions.ts` consumido por `Vaults.tsx` (e futuramente por outros lugares). `VaultCard.tsx` pode ser removido se não tiver mais consumidores — verificar e excluir.
+
+## Detalhes técnicos
+
+- Sem alterações de schema; consulta `vault_events` reutiliza RLS existente (owner via join — fazemos via `vaults!inner(owner_id)` no select ou filtro `vault_id IN (...)` após carregar vaults).
+- Tokens semânticos do design system para todas as cores (success, destructive, primary, amber via `text-amber-600`).
+- Acessibilidade: cada botão de ação tem `aria-label`; linha inteira não é clicável (evita conflitos com botões).
+- Sem mudanças em edge functions, banco ou tipos gerados.
+
+## Arquivos
+
+**Novos**
+- `src/pages/Vaults.tsx`
+- `src/hooks/useVaultActions.ts`
+- `src/components/VaultRow.tsx` (linha desktop + card mobile, responsivo internamente)
+- `src/components/VaultRecentItem.tsx`
+
+**Editados**
+- `src/App.tsx` (rota)
+- `src/components/AppSidebar.tsx` (link)
+- `src/pages/Dashboard.tsx` (remoção dos cards, CTA, recentes)
+
+**Possivelmente removido**
+- `src/components/VaultCard.tsx` (se nenhum outro consumidor após a mudança)
