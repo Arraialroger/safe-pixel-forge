@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { VaultRow } from "@/components/VaultRow";
+import { VaultRow, VAULT_GRID_COLS } from "@/components/VaultRow";
+import { cn } from "@/lib/utils";
 import { NewVaultDialog } from "@/components/NewVaultDialog";
 import { StatsCards } from "@/components/StatsCards";
 import { EmptyVaults } from "@/components/EmptyVaults";
@@ -90,13 +91,17 @@ export default function Vaults() {
       {!isLoading && vaults && vaults.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-border bg-card">
           {/* Header só no desktop */}
-          <div className="hidden grid-cols-[110px_minmax(0,1fr)_120px_90px_90px_180px_auto] gap-3 border-b border-border bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:grid">
+          <div
+            className={cn(
+              "hidden gap-3 border-b border-border bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:grid",
+              VAULT_GRID_COLS,
+            )}
+          >
             <span>Status</span>
             <span>Projeto / Cliente</span>
-            <span>Valor</span>
-            <span>Criado</span>
-            <span>Expira</span>
-            <span>Assinatura</span>
+            <span className="text-right">Valor</span>
+            <span className="text-right">Expira</span>
+            <span className="text-center">Assinatura</span>
             <span className="text-right">Ações</span>
           </div>
 
