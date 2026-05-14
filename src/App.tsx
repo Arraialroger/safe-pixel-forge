@@ -11,6 +11,7 @@ import Install from "./pages/Install.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Settings from "./pages/Settings.tsx";
 import Clients from "./pages/Clients.tsx";
+import Vaults from "./pages/Vaults.tsx";
 import PayVault from "./pages/PayVault.tsx";
 import Achievement from "./pages/Achievement.tsx";
 import AuthenticatedLayout from "./layouts/AuthenticatedLayout.tsx";
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/conquista/:id" element={<Achievement />} />
           <Route element={<AuthenticatedLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/cofres" element={<Vaults />} />
             <Route path="/clientes" element={<Clients />} />
             <Route path="/configuracoes" element={<Settings />} />
           </Route>

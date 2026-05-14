@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { VaultCard } from "@/components/VaultCard";
+import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { NewVaultDialog } from "@/components/NewVaultDialog";
 import { StatsCards } from "@/components/StatsCards";
-import {
-  VaultCardSkeleton,
-  StatsCardSkeleton,
-} from "@/components/skeletons/VaultCardSkeleton";
+import { VaultRecentItem } from "@/components/VaultRecentItem";
+import { StatsCardSkeleton } from "@/components/skeletons/VaultCardSkeleton";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthReady } from "@/hooks/useAuthReady";
 import { Vault } from "@/data/mockVaults";
@@ -28,15 +28,17 @@ export default function Dashboard() {
     },
   });
 
+  const recent = vaults?.slice(0, 3) ?? [];
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Cofres
+            Dashboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Gerencie as entregas e pagamentos dos seus projetos.
+            Visão geral das suas entregas e pagamentos.
           </p>
         </div>
         <div className="w-full sm:w-auto">
@@ -45,18 +47,11 @@ export default function Dashboard() {
       </header>
 
       {isLoading && (
-        <>
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <StatsCardSkeleton key={`stat-${i}`} />
-            ))}
-          </section>
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <VaultCardSkeleton key={`vault-${i}`} />
-            ))}
-          </section>
-        </>
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <StatsCardSkeleton key={`stat-${i}`} />
+          ))}
+        </section>
       )}
 
       {isError && (
@@ -65,17 +60,35 @@ export default function Dashboard() {
         </p>
       )}
 
-      {!isLoading && !isError && vaults && vaults.length === 0 && (
-        <EmptyVaults />
-      )}
+      {!isLoading && !isError && vaults && vaults.length === 0 && <EmptyVaults />}
 
       {!isLoading && vaults && vaults.length > 0 && (
         <>
           <StatsCards vaults={vaults} />
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {vaults.map((vault) => (
-              <VaultCard key={vault.id} vault={vault} />
-            ))}
+
+          <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">
+                  Cofres recentes
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Os últimos {recent.length} cofres criados.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/cofres">
+                  Ver todos
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+
+            <div className="space-y-1">
+              {recent.map((v) => (
+                <VaultRecentItem key={v.id} vault={v} />
+              ))}
+            </div>
           </section>
         </>
       )}
