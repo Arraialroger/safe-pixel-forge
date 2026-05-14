@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { VaultRow } from "@/components/VaultRow";
+import { VaultRow, VAULT_GRID_COLS } from "@/components/VaultRow";
+import { cn } from "@/lib/utils";
 import { NewVaultDialog } from "@/components/NewVaultDialog";
 import { StatsCards } from "@/components/StatsCards";
 import { EmptyVaults } from "@/components/EmptyVaults";
