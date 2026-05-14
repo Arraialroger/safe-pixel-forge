@@ -11,6 +11,7 @@ import Install from "./pages/Install.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Settings from "./pages/Settings.tsx";
 import Clients from "./pages/Clients.tsx";
+import Vaults from "./pages/Vaults.tsx";
 import PayVault from "./pages/PayVault.tsx";
 import Achievement from "./pages/Achievement.tsx";
 import AuthenticatedLayout from "./layouts/AuthenticatedLayout.tsx";
