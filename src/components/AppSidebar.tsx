@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings, LogOut, Users, Lock } from "lucide-react";
+import { Settings, LogOut, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { Logo } from "@/components/Logo";
@@ -6,9 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOwnerBranding } from "@/hooks/useBranding";
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/cofres", label: "Cofres", icon: Lock },
-  { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/app", label: "Cofres", icon: Lock },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
