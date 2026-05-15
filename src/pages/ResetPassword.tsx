@@ -52,7 +52,7 @@ export default function ResetPassword() {
         return;
       }
       toast({ title: "Senha atualizada", description: "Você já está logado." });
-      navigate("/dashboard");
+      navigate("/app");
     } finally {
       setSubmitting(false);
     }

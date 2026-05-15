@@ -46,7 +46,7 @@ export default function Login() {
           toast({ title: "Não foi possível entrar", description: translateAuthError(error.message), variant: "destructive" });
           return;
         }
-        navigate("/dashboard");
+        navigate("/app");
       } else {
         const { data, error } = await signUp(email.trim(), password);
         if (error) {
@@ -55,7 +55,7 @@ export default function Login() {
         }
         if (data.session) {
           toast({ title: "Conta criada", description: "Bem-vindo ao PixelSafe." });
-          navigate("/dashboard");
+          navigate("/app");
         } else {
           toast({ title: "Confirme seu email", description: "Enviamos um link de confirmação para o seu email." });
         }

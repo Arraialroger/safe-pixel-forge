@@ -13,7 +13,7 @@ const Index = () => {
     );
   }
 
-  return <Navigate to={user ? "/dashboard" : "/login"} replace />;
+  return <Navigate to={user ? "/app" : "/login"} replace />;
 };
 
 export default Index;

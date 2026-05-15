@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,10 +8,8 @@ import Login from "./pages/Login.tsx";
 import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import Install from "./pages/Install.tsx";
-import Dashboard from "./pages/Dashboard.tsx";
+import Home from "./pages/Home.tsx";
 import Settings from "./pages/Settings.tsx";
-import Clients from "./pages/Clients.tsx";
-import Vaults from "./pages/Vaults.tsx";
 import PayVault from "./pages/PayVault.tsx";
 import Achievement from "./pages/Achievement.tsx";
 import AuthenticatedLayout from "./layouts/AuthenticatedLayout.tsx";
@@ -34,11 +32,13 @@ const App = () => (
           <Route path="/pay/:slug" element={<PayVault />} />
           <Route path="/conquista/:id" element={<Achievement />} />
           <Route element={<AuthenticatedLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/cofres" element={<Vaults />} />
-            <Route path="/clientes" element={<Clients />} />
+            <Route path="/app" element={<Home />} />
             <Route path="/configuracoes" element={<Settings />} />
           </Route>
+          {/* Redirects das rotas antigas */}
+          <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+          <Route path="/cofres" element={<Navigate to="/app" replace />} />
+          <Route path="/clientes" element={<Navigate to="/app" replace />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
