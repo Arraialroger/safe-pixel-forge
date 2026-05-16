@@ -1,5 +1,5 @@
 import { Lock, Upload, Send, DownloadCloud } from "lucide-react";
-import { NewVaultDialog } from "@/components/NewVaultDialog";
+import { NewVaultDialog } from "@/features/vaults/new/NewVaultDialog";
 
 const steps = [
   {
