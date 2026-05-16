@@ -1,4 +1,4 @@
-import { NewVaultDialog } from "@/components/NewVaultDialog";
+import { NewVaultDialog } from "@/features/vaults/new/NewVaultDialog";
 
 export function VaultsHeader() {
   return (
